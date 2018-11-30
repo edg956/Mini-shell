@@ -6,7 +6,6 @@
 //Colores
 
 #define RESET_COLOR    "\x1b[0m"
-//#define COLOR_RESET "\e[0m"
 #define CYAN_T     "\x1b[1m\033[36m"
 #define AMARILLO_T "\x1b[1m\033[33m"
 #define ROJO_F     "\x1b[41m"
@@ -49,12 +48,18 @@ int internal_cd(char **args);
 int internal_export(char **args);
 int internal_source(char **args);
 int internal_jobs(char **args);
+int internal_jobs2();
 
 /**
  * FUNCIONES AUXILIARES
  */
+void ctrlz(int signum);
 void reaper(int signum);
 void ctrlc(int signum);
 void imprime_error(char *mensaje_error);
 void print_prompt();
 int check_formato();
+int is_background (char **args);
+int jobs_list_add(pid_t pid, char status, char *command_line);
+int jobs_list_find(pid_t pid);
+int jobs_list_remove(int pos);
