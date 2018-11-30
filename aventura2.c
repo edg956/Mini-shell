@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200112L
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -6,174 +7,48 @@
 #include <wait.h>
 #include "aventura2.h"
 #include <sys/types.h>
+#include <signal.h>
 
 
-void main() {
+/******************************************************************************
+                            VARIABLES GLOBALES
+******************************************************************************/
+char *program_name = NULL;
+/*
+    Array que guarda los diferentes estados que toman los procesos durante
+    su ejecución en primer y segundo plano.
+*/
+static struct info_process jobs_list[ARGS_SIZE];
+
+void main(int argc, char *argv[]) {
+
+    program_name = malloc(COMMAND_LINE_SIZE);
+    program_name = strcpy(program_name, argv[0]);
 
     //Declaraciones
     char *line = malloc(COMMAND_LINE_SIZE);
 
+    //Indicar a main que escuche señales SIGCHLD y SIGINT
+    signal(SIGCHLD, reaper);
+    signal(SIGINT, ctrlc);
+
+    //Inicializar estructura jobs_list[]
+    jobs_list[0].pid = 0;
+    jobs_list[0].status = 'F';
+    jobs_list[0].command_line[0] = '\0';
+
     print_prompt();
-    int i = 0; 
 
-    while (i==0) {
-
+    while (1) {
         execute_line(read_line(line));
         print_prompt();
-
     }
 
 }
 
-/******************************************************************************
-                             FUNCIONES DE APOYO
-******************************************************************************/
-int cuenta_elementos(char **args) {
-    int numargs;
-    numargs = 0;
-    while (args[numargs] != NULL) {
-        numargs++;
-    }
-    return numargs;
-}
-
-/**
- * Metodo que imprime a través de la salida estandar de errores un mensaje
- * indicando:
- *      Número de error (errno): mensaje de error.
- * En caso de que el parámetro mensaje_error == NULL, mensaje de error será el
- * String devuelto por strerror(errno) -el error correspondiente a errno.
- * 
- * En caso contrario, se imprime el mensaje_error recibido.
- * 
- * Parámetros:
- *          +mensaje_error: String con el mensaje de error correspondiente.
- * 
- * Return: void method. Returns nothing.
- */
-void imprime_error(char *mensaje_error) {
-    if (mensaje_error == NULL) {
-        fprintf(stderr, ROJO_F"Error %d: %s", errno, strerror(errno));
-    
-    } else {
-        fprintf(stderr, ROJO_F"%s", mensaje_error);
-    }
-    fprintf(stderr, "%s\n", COLOR_RESET);
-}
-
-/**
- * 
- * Funcion que imprime el prompt al usuario por consola, indicando
- * la ruta del directorio donde se encuentra al usuario, y recoje el
- * comando introducido guardandolo en 'line'.
- * 
- * Parámetros:
- *      +line: Puntero al String donde guardar la linea del comando
- * Return:
- *      +pline: Puntero al String que contiene el comando
- */
-void print_prompt() {
-
-    //Declaraciones
-    char *user = getenv("USER");
-
-    //Obtención del hostname. 
-    char hostName[256];
-    hostName[256] = '\0';
-    gethostname(hostName, 256);
-
-    char cwd[256]; 
-    //char *path = getcwd(cwd, sizeof(cwd));
-    char *path = getenv("PWD");
-
-    printf(GREEN_T"%s@%s"RESET_COLOR":"BLUE_T"%s"RESET_COLOR"%c ", user, 
-    hostName, path, PROMPT);
-    
-}
-
-/**
- * Función que verifica que el String 'argument' cumple con el formato aceptado
- * por bash para argumentos compuestos de palabras separados por espacios.
- * 
- * Los formatos aceptados son:
- * 
- *      "argumento separado por espacios".   Ej: cd "carpeta con espacios"
- *      'argumento separado por espacios'.   Ej: export VAR='Valor con espacios'
- *      argumento\ separado\ por\ espacios.  Ej: cd carpeta\ con\ espacios/
- * 
- * Cuando se ejecuta un comando de un solo parámetro y se detectan más paráme-
- * tros en la linea de comando, se ha de recuperar el argumento completo a
- * partir de **args e invocar a check_formato.
- * 
- * Parámetros:
- *          +argument:  Puntero al String que conforma el argumento a ser
- *                      validado.
- * 
- * Return:
- *          +1: Si el argumento cumple con el formato para argumentos compuestos
- *          +(-1): Si el argumento es inválido.
- */
-int check_formato(char *argument) {
-    if (strchr(argument,'\'') || strchr(argument,'\\') || 
-            strchr(argument,'\"')) {
-        for (int i = 0; argument[i] != '\0'; i++) {
-            /*
-                Verifica que cuando se consigue un argumento con formato                    ['argumento con espacios'] se cumpla la condición:
-                "No puede haber un argumento que comience por el
-                caracter '\'' y no termine por el caracter '\''."
-
-                Es decir, al terminar el argumento, antes de '\0' tiene que 
-                existir el caracter '\''.
-
-            */
-            if (argument[i] == '\'') {
-                while (argument[i] != '\0' && argument[i] != '/') {
-                        i++;
-                    }
-                if (argument[i-1] != '\'') {
-                    return -1;
-                }
-            }
-
-            /*
-                Verifica que cuando se consigue un argumento con formato
-                ["argumento con espacios"] se cumpla la condición:
-
-                "No puede haber un argumento que comience por el
-                caracter '\"' y no termine por el caracter '\"'."
-
-                Es decir, al terminar el argumento, antes de '\0' tiene que 
-                existir el caracter '\"'.
-
-            */
-            if (argument[i] == '\"') {
-                while (argument[i] != '\0' && argument[i] != '/') {
-                        i++;
-                    }
-                if (argument[i-1] != '\"') {
-                    return -1;
-                }
-            }
-
-            /*
-                Verifica que cuando se consigue un argumento con formato
-                [argumento\ con\ espacios] se cumpla la condición:
-
-                "No puede haber un espacio ' ' sin un caracter '\' antes."
-            */
-            if (argument[i] == ' ' && argument[i-1]!= '\\') {
-                return -1;
-            }
-        }
-        return 1;
-    } else {
-        return -1;
-    }
-}
 /******************************************************************************
                          FUNCIONES DE LA AVENTURA 2
 ******************************************************************************/
-
 /*
  * Función obtiene el comando escrito por usuario en la terminal y limpia el
  * buffer de la entrada de datos estandar stdin.
@@ -187,10 +62,25 @@ int check_formato(char *argument) {
  *                 entrado.
  */
 char *read_line(char *line) {
-
     char *command = fgets(line, COMMAND_LINE_SIZE, stdin);
-    fflush(stdin);
 
+    /*
+        PREGUNTAR A PROFESORA:
+
+        En la documentación del nivel 4 se dice que hay que comprobar en caso 
+        de que: la linea leída sea NULL, y que no se haya producido un EOF.
+        (¿Quiere decir que no se haya llegado al final de fichero, por tanto:
+        feof(stdin) habría de ser == 0?)
+
+        Creo que es bastante claro que es una estructura de control para en
+        caso de tener una linea vacía y presionar Ctrl-D evitar un Core-Dumped
+    */
+    if (!command && !feof(stdin)) {
+        command = line;
+        command[0] = 0;
+    }
+
+    fflush(stdin);
     return command;
 }
 
@@ -216,8 +106,19 @@ char *read_line(char *line) {
  *      +(-1): En caso de error.
  */
 int execute_line(char *line) {
+    
+    if (line == 0) {
+        puts("");
+        exit(1);
+    }
 
+    //Declaraciones
     char **args = malloc(ARGS_SIZE);
+    char *linecpy = malloc(COMMAND_LINE_SIZE);
+    
+    //Copia para procesos hijos en ejecución
+    linecpy = strcpy(linecpy,line);
+
     int nTokens;
 
     nTokens = parse_args(args, line); //Nro. de Tokens obtenidos.
@@ -225,8 +126,7 @@ int execute_line(char *line) {
     //Check si el comando ha sido un comando interno o externo
     if (check_internal(args) == 0) {
         //Ejecución de comando externo
-        pid_t cpid, res;
-        int wstatus;
+        pid_t cpid;
 
         //Creación de proceso hijo para ejecutar comando externo
         cpid = fork();
@@ -236,35 +136,42 @@ int execute_line(char *line) {
             return -1;
         }
 
-        //Si cpid != 0 -> Ejecuta código para proceso padre
-        if (cpid != 0) {
+        //Código para proceso hijo
+        if (cpid == 0) {
+            
+            signal(SIGINT, SIG_IGN); //AGREGAR EN NIVEL 5
+            signal(SIGCHLD, SIG_DFL);
 
-            //Check errores en wait()
-            if (wait(&wstatus) == -1) {
-                perror("wait()");
-                exit(EXIT_FAILURE);
-            }
-            //Indicar razón de finalización de proceso hijo.
-            if (WIFEXITED(wstatus)) {
-                printf("Proceso hijo %d finalizado. Estado=%d\n\n", cpid, WEXITSTATUS(wstatus));
-            } else if (WIFSIGNALED(wstatus)) {
-                printf("Proceso hijo %d exterminado por señal %d\n\n", cpid, WTERMSIG(wstatus));
-            } else if (WIFSTOPPED(wstatus)) {
-                printf("Proceso hijo %d detenido por señal %d\n\n", cpid, WSTOPSIG(wstatus));
-            }
+            printf("[execute_line(): PID proceso padre: %d (%s)]\n", getppid(), program_name);
+            printf("[execute_line(): PID proceso hijo: %d (%s)]\n", getpid(), args[0]);
 
-        } else {    
-            //Código para proceso hijo
-            printf("PID proceso padre: %d\n",getppid());
-            printf("PID proceso hijo: %d\n",getpid());
             //Check errores en execvp(). Enviar error por stderr y realizar
-            //exit()
             if (execvp(args[0],args) == -1) {
                 fprintf(stderr, "%s\n", strerror(errno));
                 exit(1);
             }
         }
+        
+        //Código para proceso padre:  
+
+        //Guardar información de proceso en foreground
+        jobs_list[0].pid = cpid;
+        jobs_list[0].status = 'E';
+        char *linecop = &jobs_list[0].command_line[0];
+        linecop = strcpy(linecop, linecpy);
+
+        //Enviar señal al enterrador de hijos
+        signal(SIGCHLD, reaper);
+        signal(SIGINT, ctrlc);
+
+        while (jobs_list[0].pid != 0) {
+            pause();
+        }
+
     }
+
+    //Libera variables locales auxiliares
+    free(linecpy);
 }
 
 /**
@@ -280,8 +187,7 @@ int execute_line(char *line) {
  *      +count: Contador con el numero de tokens obtenidos.
  * 
  */
-int parse_args(char **args, char *line) {
-    
+int parse_args(char **args, char *line) { 
     int count = 0;
     const char delim[] = " \t\n\r";
 
@@ -296,11 +202,9 @@ int parse_args(char **args, char *line) {
             *args = strtok(NULL, &delim[0]);
         }
     }
-
     return count;
-
+    
 }
-
 
 /** 
  * Función que averigua si se trata de un comando interno mediante la funcion
@@ -572,3 +476,278 @@ int internal_jobs(char **args) {
     return 1;
 }
 
+/******************************************************************************
+                             FUNCIONES DE APOYO
+******************************************************************************/
+/**
+ * Función que se encarga de 'enterrar' procesos hijos de un proceso para
+ * evitar la existencia de procesos zombies en la tabla de procesos.
+ * 
+ * Una vez un proceso hijo que se ejecuta en primer plano acaba, el reaper se
+ * encarga de 'enterrarle' y además actualiza su estado en jobs_list[0] -el
+ * proceso en primer plano- de la siguiente manera:
+ *      jobs_list[0].pid = 0;
+ *      jobs_list[0].status = 'F'
+ *      jobs_list[0].command_line: Se reemplaza su contenido por un '\0' en la
+ *                                 posición 0 del array, conviertiendole en un
+ *                                 String vacío.
+ * 
+ * Parámetros:
+ *          signum: Número de la señal que recibe: SIGCHLD
+ * Return:  Void method. Returns nothing.
+ */
+void reaper(int signum) {
+
+    signal(SIGCHLD, reaper);
+
+    pid_t pid;
+    int wstatus;
+
+    //Check errores en wait()
+    while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0) {
+        if (pid == jobs_list[0].pid) {
+            jobs_list[0].pid = 0;
+            jobs_list[0].status = 'F';
+            jobs_list[0].command_line[0] = '\0';
+        }
+
+        //Indicar razón de finalización de proceso hijo.
+        if (WIFEXITED(wstatus)) {
+            printf("[reaper(): Proceso hijo %d finalizado. Estado=%d]\n", pid, WEXITSTATUS(wstatus));
+        } else if (WIFSIGNALED(wstatus)) {
+            printf("[reaper(): Proceso hijo %d exterminado por señal %d]\n", pid, WTERMSIG(wstatus));
+        } else if (WIFSTOPPED(wstatus)) {
+            printf("[reaper(): Proceso hijo %d detenido por señal %d]\n", pid, WSTOPSIG(wstatus));
+        }
+    }
+}
+
+/**
+ * Esta función se encarga de recoger y tratar la señal SIGINT que genera la 
+ * combinación de teclas Ctrl + c. Se comprueba si hay procesos en foreground 
+ * y de ser así, se comprueba si el proceso que está en foreground es el
+ * minishell. Si es el minishell se notifica por pantalla, sino, se "mata" el 
+ * proceso correspondiente. 
+ * 
+ * Si no hay procesos en foreground, simplemente se notifica a través de 
+ * pantalla. 
+ * 
+ * Parámetros: 
+ *            +signum: Número de la señal que recibe: SIGINT.
+ * Return: 
+ *            +Método void. No devuelve ningún valor. 
+ */
+
+void ctrlc(int signum) {
+
+    signal(SIGINT, ctrlc);
+
+    //Declaraciones
+    char *error = NULL; 
+    char *line = malloc(COMMAND_LINE_SIZE);
+    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
+    
+    //Ver que haya algún proceso en foreground
+    if (jobs_list[0].pid > 0) {
+        /* 
+            Copiar nombre de programa y la linea de comando del proceso en
+            para poder modificarlos y compararles
+        */
+        pnamecpy = strcpy(pnamecpy, program_name); //Copia program_name
+        strcat(pnamecpy, "\n");
+
+        char *delim = " ";
+        line = strcpy(line, jobs_list[0].command_line); //Copia linea de
+        line = strtok(line, delim);                     //proceso en fg
+
+        //Comparar que el proceso en foreground no sea el shell
+        if (strcmp(line, pnamecpy) != 0) {
+      
+            puts("Matamos el proceso en foreground.");
+            kill(jobs_list[0].pid, SIGTERM);
+
+        } else {
+            /*
+            DISCUTIR NECESIDAD DE ESTA PARTE DE CODIGO:
+
+            El único caso en que se puede dar esto es que desde el mini shell,
+            se haya ejecutado el archivo compilado de la aventura2 ej:
+            eugenio@mini_shell:ruta$ ./mini_shell.
+
+            En este caso, tanto la linea del último comando, como el nombre del
+            programa coinciden.
+
+            SIGING llega a ambos shells, haciendo que ctrlc se ejecute dos veces:
+            1 por cada shell en ejecución. En cada shell ocurre lo siguiente:
+
+            [Contexto: desde el terminal se ejecuta ./mini_shell.
+                       desde el mini shell se ejecuta ./mini_shell y
+                       desde el mini_shell hijo se presiona ctrl+c]
+
+            Shell hijo: Al no tener ningún proceso en foreground (ejecutamos
+                        ctrl+c directamente) se imprime un mensaje de error
+                        notificando que la señal SIGTERM no se ha enviado 
+                        porque no hay proceso en foreground
+
+            Shell padre: Al tener un proceso en foreground (./mini_shell) y
+                         coincidir el argumento 0 del proceso hijo con el
+                         nombre de programa (variable program_name) del shell
+                         padre, se imprime por pantalla el error correspondien-
+                         te a que el proceso en foreground es el shell.
+            
+            Problema: Se imprimen dos mensajes de error cuando uno -el del 
+                      hijo- basta.
+
+            
+        */
+        
+            error = "Señal SIGTERM no enviada debido a que el proceso en foreground es el shell.";
+            imprime_error(error);
+
+        }
+
+    } else {
+
+        error = "Señal SIGTERM no enviada debido a que no hay proceso en foreground.";
+        imprime_error(error);
+
+    }
+
+    //Libera variables locales auxiliares
+    free(line);
+    free(pnamecpy);
+
+}
+
+/**
+ * Metodo que imprime a través de la salida estandar de errores un mensaje
+ * indicando:
+ *      Número de error (errno): mensaje de error.
+ * En caso de que el parámetro mensaje_error == NULL, mensaje de error será el
+ * String devuelto por strerror(errno) -el error correspondiente a errno.
+ * 
+ * En caso contrario, se imprime el mensaje_error recibido.
+ * 
+ * Parámetros:
+ *          +mensaje_error: String con el mensaje de error correspondiente.
+ * 
+ * Return: void method. Returns nothing.
+ */
+void imprime_error(char *mensaje_error) {
+
+    if (mensaje_error == NULL) {
+        fprintf(stderr, ROJO_F"Error %d: %s"RESET_COLOR"\n", errno, strerror(errno));
+    
+    } else {
+        fprintf(stderr, ROJO_F"%s"RESET_COLOR"\n", mensaje_error);
+    }
+   fprintf(stderr, RESET_COLOR"%s", "");
+}
+
+/**
+ * 
+ * Funcion que imprime el prompt al usuario por consola, indicando
+ * la ruta del directorio donde se encuentra al usuario, y recoje el
+ * comando introducido guardandolo en 'line'.
+ * 
+ * Parámetros:
+ *      +line: Puntero al String donde guardar la linea del comando
+ * Return:
+ *      +pline: Puntero al String que contiene el comando
+ */
+void print_prompt() {
+
+    //Declaraciones
+    char *user = getenv("USER");
+
+    //Obtención del hostname. 
+    char hostName[256];
+    hostName[256] = '\0';
+    gethostname(hostName, 256);
+
+    char cwd[256]; 
+    //char *path = getcwd(cwd, sizeof(cwd));
+    char *path = getenv("PWD");
+
+    printf(CYAN_T"%s@%s"RESET_COLOR":"AMARILLO_T"%s"RESET_COLOR"%c ", user, hostName, path, PROMPT);
+}
+
+/**
+ * Función que verifica que el String 'argument' cumple con el formato aceptado
+ * por bash para argumentos compuestos de palabras separados por espacios.
+ * 
+ * Los formatos aceptados son:
+ * 
+ *      "argumento separado por espacios".   Ej: cd "carpeta con espacios"
+ *      'argumento separado por espacios'.   Ej: export VAR='Valor con espacios'
+ *      argumento\ separado\ por\ espacios.  Ej: cd carpeta\ con\ espacios/
+ * 
+ * Cuando se ejecuta un comando de un solo parámetro y se detectan más paráme-
+ * tros en la linea de comando, se ha de recuperar el argumento completo a
+ * partir de **args e invocar a check_formato.
+ * 
+ * Parámetros:
+ *          +argument:  Puntero al String que conforma el argumento a ser
+ *                      validado.
+ * 
+ * Return:
+ *          +1: Si el argumento cumple con el formato para argumentos compuestos
+ *          +(-1): Si el argumento es inválido.
+ */
+int check_formato(char *argument) {
+    if (strchr(argument,'\'') || strchr(argument,'\\') || 
+            strchr(argument,'\"')) {
+        for (int i = 0; argument[i] != '\0'; i++) {
+            /*
+                Verifica que cuando se consigue un argumento con formato                    ['argumento con espacios'] se cumpla la condición:
+                "No puede haber un argumento que comience por el
+                caracter '\'' y no termine por el caracter '\''."
+
+                Es decir, al terminar el argumento, antes de '\0' tiene que 
+                existir el caracter '\''.
+
+            */
+            if (argument[i] == '\'') {
+                while (argument[i] != '\0' && argument[i] != '/') {
+                        i++;
+                    }
+                if (argument[i-1] != '\'') {
+                    return -1;
+                }
+            }
+
+            /*
+                Verifica que cuando se consigue un argumento con formato
+                ["argumento con espacios"] se cumpla la condición:
+
+                "No puede haber un argumento que comience por el
+                caracter '\"' y no termine por el caracter '\"'."
+
+                Es decir, al terminar el argumento, antes de '\0' tiene que 
+                existir el caracter '\"'.
+
+            */
+            if (argument[i] == '\"') {
+                while (argument[i] != '\0' && argument[i] != '/') {
+                        i++;
+                    }
+                if (argument[i-1] != '\"') {
+                    return -1;
+                }
+            }
+
+            /*
+                Verifica que cuando se consigue un argumento con formato
+                [argumento\ con\ espacios] se cumpla la condición:
+
+                "No puede haber un espacio ' ' sin un caracter '\' antes."
+            */
+            if (argument[i] == ' ' && argument[i-1]!= '\\') {
+                return -1;
+            }
+        }
+        return 1;
+    } else {
+        return -1;
+    }
+}

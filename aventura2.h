@@ -6,29 +6,37 @@
 //Colores
 
 #define RESET_COLOR    "\x1b[0m"
-#define GREEN_T        "\x1b[1m\033[32m"
-#define BLUE_T     "\x1b[1m\033[34m"
-#define COLOR_RESET "\e[0m"
+//#define COLOR_RESET "\e[0m"
+#define CYAN_T     "\x1b[1m\033[36m"
+#define AMARILLO_T "\x1b[1m\033[33m"
 #define ROJO_F     "\x1b[41m"
 
 /*Se dejan los siguientes colores comentados por si son necesarios para futuras
-implementaciones./
+implementaciones.
 
 #define NEGRO_T        "\x1b[30m"
 #define NEGRO_F        "\x1b[40m"
 #define ROJO_T     "\x1b[31m"
-
 #define VERDE_F        "\x1b[42m"
-#define AMARILLO_T "\x1b[33m"
 #define AMARILLO_F  "\x1b[43m"
 #define AZUL_F      "\x1b[44m"
-#define MAGENTA_T  "\x1b[35m"
+#define MAGENTA_T  "\x1b[1m\033[35m"
 #define MAGENTA_F  "\x1b[45m"
-#define CYAN_T     "\x1b[36m"
 #define CYAN_F     "\x1b[46m"
 #define BLANCO_T   "\x1b[37m"
-#define BLANCO_F   "\x1b[47m"*/
+#define BLANCO_F   "\x1b[47m"
+#define GREEN_T        "\x1b[1m\033[32m"
+#define BLUE_T     "\x1b[1m\033[34m"
+*/
 
+/**
+ * ESTRUCTURAS (STRUCT) DE MINISHELL
+ */
+struct info_process {
+    pid_t pid;
+    char status;    //'E', 'D', 'F'
+    char command_line[COMMAND_LINE_SIZE];
+};
 
 /**
  * FUNCIONES DE MINISHELL
@@ -45,6 +53,8 @@ int internal_jobs(char **args);
 /**
  * FUNCIONES AUXILIARES
  */
+void reaper(int signum);
+void ctrlc(int signum);
 void imprime_error(char *mensaje_error);
-int cuenta_elementos(char **args);
 void print_prompt();
+int check_formato();
