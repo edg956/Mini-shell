@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <wait.h>
 #include "aventura2.h"
+#include <sys/types.h>
 
 
 void main() {
@@ -35,14 +37,28 @@ int cuenta_elementos(char **args) {
     return numargs;
 }
 
+/**
+ * Metodo que imprime a través de la salida estandar de errores un mensaje
+ * indicando:
+ *      Número de error (errno): mensaje de error.
+ * En caso de que el parámetro mensaje_error == NULL, mensaje de error será el
+ * String devuelto por strerror(errno) -el error correspondiente a errno.
+ * 
+ * En caso contrario, se imprime el mensaje_error recibido.
+ * 
+ * Parámetros:
+ *          +mensaje_error: String con el mensaje de error correspondiente.
+ * 
+ * Return: void method. Returns nothing.
+ */
 void imprime_error(char *mensaje_error) {
     if (mensaje_error == NULL) {
-      fprintf(stderr, ROJO_F"Error %d: %s\n", errno, strerror(errno));
-      fprintf(stderr, COLOR_RESET);
-    }  else{
-      fprintf(stderr, ROJO_F"%s\n", mensaje_error);
-      fprintf(stderr, COLOR_RESET);
+        fprintf(stderr, ROJO_F"Error %d: %s", errno, strerror(errno));
+    
+    } else {
+        fprintf(stderr, ROJO_F"%s", mensaje_error);
     }
+    fprintf(stderr, "%s\n", COLOR_RESET);
 }
 
 /**
@@ -51,7 +67,7 @@ void imprime_error(char *mensaje_error) {
  * la ruta del directorio donde se encuentra al usuario, y recoje el
  * comando introducido guardandolo en 'line'.
  * 
- * Parametros:
+ * Parámetros:
  *      +line: Puntero al String donde guardar la linea del comando
  * Return:
  *      +pline: Puntero al String que contiene el comando
@@ -89,11 +105,11 @@ void print_prompt() {
  * tros en la linea de comando, se ha de recuperar el argumento completo a
  * partir de **args e invocar a check_formato.
  * 
- * Parametros:
+ * Parámetros:
  *          +argument:  Puntero al String que conforma el argumento a ser
  *                      validado.
  * 
- * Devuelve:
+ * Return:
  *          +1: Si el argumento cumple con el formato para argumentos compuestos
  *          +(-1): Si el argumento es inválido.
  */
@@ -179,9 +195,21 @@ char *read_line(char *line) {
 }
 
 /**
- * Funcion que ejecuta el comando contenido en el String 'line'
+ * Funcion que ejecuta el comando contenido en el String 'line'.
+ * Implementa la función check_internal para determinar si se trata de un
+ * comando interno o externo. 
  * 
- * Parametros:
+ * En caso de ser interno, check_internal se encarga de realizar el llamado a
+ * la función correspondiente.
+ * 
+ * En caso de tratarse de un comando externo, execute_line bifurca la ejecución
+ * en dos procesos (padre e hijo).
+ * 
+ * El proceso hijo se encarga de ejecutar el comando externo indicado.
+ * El proceso padre espera a que el proceso hijo acabe para recogerlo e indicar
+ * el final del mismo.
+ * 
+ * Parámetros:
  *      +line: Puntero al String que contiene el comando.
  * Return:
  *      +0: Si la operacion se realizo sin problemas.
@@ -194,8 +222,48 @@ int execute_line(char *line) {
 
     nTokens = parse_args(args, line); //Nro. de Tokens obtenidos.
 
+    //Check si el comando ha sido un comando interno o externo
     if (check_internal(args) == 0) {
-        printf("Comando no es interno\n"); //No es parte del proyecto
+        //Ejecución de comando externo
+        pid_t cpid, res;
+        int wstatus;
+
+        //Creación de proceso hijo para ejecutar comando externo
+        cpid = fork();
+        
+        if (cpid == -1) {   //Check errores en fork()
+            fprintf(stderr, "%s\n", strerror(errno));
+            return -1;
+        }
+
+        //Si cpid != 0 -> Ejecuta código para proceso padre
+        if (cpid != 0) {
+
+            //Check errores en wait()
+            if (wait(&wstatus) == -1) {
+                perror("wait()");
+                exit(EXIT_FAILURE);
+            }
+            //Indicar razón de finalización de proceso hijo.
+            if (WIFEXITED(wstatus)) {
+                printf("Proceso hijo %d finalizado. Estado=%d\n\n", cpid, WEXITSTATUS(wstatus));
+            } else if (WIFSIGNALED(wstatus)) {
+                printf("Proceso hijo %d exterminado por señal %d\n\n", cpid, WTERMSIG(wstatus));
+            } else if (WIFSTOPPED(wstatus)) {
+                printf("Proceso hijo %d detenido por señal %d\n\n", cpid, WSTOPSIG(wstatus));
+            }
+
+        } else {    
+            //Código para proceso hijo
+            printf("PID proceso padre: %d\n",getppid());
+            printf("PID proceso hijo: %d\n",getpid());
+            //Check errores en execvp(). Enviar error por stderr y realizar
+            //exit()
+            if (execvp(args[0],args) == -1) {
+                fprintf(stderr, "%s\n", strerror(errno));
+                exit(1);
+            }
+        }
     }
 }
 
@@ -204,8 +272,8 @@ int execute_line(char *line) {
  * ejecutado por el usuario y lo trocea en tokens para guardarlos en 
  * el vector de tokens 'args'.
  * 
- * Parametros:
- *      +args: Puntero a varios String que contendrán los tokens 
+ * Parámetros:
+ *      +args: Doble puntero a varios String que contendrán los tokens 
  *             obtenidos del comando.
  *      +line: Puntero al String que contiene el comando.
  * Return: 
@@ -242,7 +310,7 @@ int parse_args(char **args, char *line) {
  *      -internal_source()
  *      -internal_jobs()
  * 
- * Parametros:
+ * Parámetros:
  *          +args: doble puntero que contiene tokens obtenidos del comando
  *                 introducido separado por " ". 
  * Return:
@@ -257,7 +325,8 @@ int check_internal(char **args){
               return internal_cd(args);
         } else if (strcmp(args[0], "export") == 0) {
               return internal_export(args);
-        } else if (strcmp(args[0], "source") == 0) {
+        } else if (strcmp(args[0], "source") == 0 ||
+                    strcmp(args[0], ".") == 0) {
               return internal_source(args);
         } else if (strcmp(args[0], "jobs") == 0) {
               return internal_jobs(args);
@@ -368,9 +437,9 @@ int internal_cd(char **args) {
     if (chdir(path) != 0) { //Check for errors
         
         if (errno == ENOENT) {
-            puts("Archivo o fichero inexistente.");
+            puts("cd: Archivo o fichero inexistente.");
         } else {
-            perror("Error");
+            perror("cd: error");
         }
         return -1;
 
@@ -405,7 +474,7 @@ int internal_export(char **args){
 
     //Check existencia de argumento
     if (args[1] == NULL)  {
-        fprintf(stderr, "%s", "Incorrect sintax. \nThe sintax is: export VAR_NAME=NEW_VALUE\n");
+        fprintf(stderr, "%s\n", "Incorrect sintax. \nThe sintax is: export VAR_NAME=NEW_VALUE\n");
         return -1;
     }
 
@@ -428,7 +497,7 @@ int internal_export(char **args){
 
         //Análisis de validez de argumento. Ver check_formato()
         if(check_formato(argument) == -1) {
-            fprintf(stderr, "%s", "Incorrect sintax. \nThe sintax is: export VAR_NAME=NEW_VALUE\n");
+            fprintf(stderr, "%s\n", "Incorrect sintax. \nThe sintax is: export VAR_NAME=NEW_VALUE\n");
             return -1;
         }
 
@@ -456,28 +525,42 @@ int internal_export(char **args){
     printf("Nombre: %s\n", nombre);
     printf("Valor: %s\n", valor);
 
-    if (nombre == NULL || valor == NULL) {
-        puts("Error de sintaxis. Uso: export NOMBRE=VALOR.");
+    if (valor == NULL) {
+        fprintf(stderr, "%s\n", "Incorrect sintax. \nThe sintax is: export VAR_NAME=NEW_VALUE\n");
         return 1;
     }
 
-    printf("\nValor inicial de la variable %s: %s\n", nombre, getenv(nombre));
+    printf("Valor inicial de la variable %s: %s\n", nombre, getenv(nombre));
     setenv(nombre, valor, 1);
-    printf("\nValor final de la variable %s: %s\n", nombre, getenv(nombre));
+    printf("Valor final de la variable %s: %s\n", nombre, getenv(nombre));
     return 1;
     
 }
 
+/**
+ * Funcion que abre un fichero de scripts y ejecuta cada linea desde el contexto
+ * del terminal que le ejecuta.
+ * 
+ * Parámetros:
+ *          +args: Doble puntero a Strings que contienen los tokens del comando.
+ *                 Cada token representa un argumento del comando.
+ * Return:
+ *          +1: Si todo se ha ejecutado sin problemas.
+ *          +(-1):  Si ha ocurrido un error en la ejecución del source
+ */
 int internal_source(char **args) {
     FILE *f;
+    //Apertura de fichero
     f = fopen (args[1], "r");
-    if (f == NULL){
+    if (f == NULL){ //Check for errors
         imprime_error(NULL);
     }
-    else{
+    else {
+        //Lectura y ejecución linea a linea hasta llegar a fin de fichero.
         char linea[COMMAND_LINE_SIZE];
         while (fgets(linea, COMMAND_LINE_SIZE, f) != NULL){
             execute_line(linea);
+            fflush(f);
         }
         fclose(f);
     }
