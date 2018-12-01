@@ -76,7 +76,7 @@ char *read_line(char *line) {
         Creo que es bastante claro que es una estructura de control para en
         caso de tener una linea vacía y presionar Ctrl-D evitar un Core-Dumped
     */
-    if (!command && feof(stdin)) {
+    if (!command && !feof(stdin)) {
         command = line;
         command[0] = 0;
         puts("");
@@ -109,7 +109,9 @@ char *read_line(char *line) {
  */
 int execute_line(char *line) {
     
-    if (line == 0) return 0;
+    //Exit cuando Ctrl+D es presionado y se devuelve un puntero NULL.
+    if (line == 0) exit(1);
+
     //Declaraciones
     char **args = malloc(ARGS_SIZE);
     char *linecpy = malloc(COMMAND_LINE_SIZE);
@@ -474,9 +476,6 @@ int internal_jobs(char **args) {
     return 1;
 }
 
-/******************************************************************************
-                             FUNCIONES DE APOYO
-******************************************************************************/
 /**
  * Función que se encarga de 'enterrar' procesos hijos de un proceso para
  * evitar la existencia de procesos zombies en la tabla de procesos.
@@ -617,6 +616,164 @@ void ctrlc(int signum) {
 }
 
 /**
+ * Esta función se encarga de recoger y tratar la señal SIGTSTP que genera la 
+ * combinación de teclas Ctrl + z. Se comprueba si hay procesos en foreground 
+ * y de ser así, se comprueba si el proceso que está en foreground es el
+ * minishell. Si es el minishell se notifica por pantalla, sino, se detiene el 
+ * proceso correspondiente y se modifican sus datos. 
+ * 
+ * Si no hay procesos en foreground, simplemente se notifica a través de 
+ * pantalla. 
+ * 
+ * Parámetros: 
+ *            +signum: Número de la señal que recibe: SIGTSTP.
+ * Return: 
+ *            +Método void. No devuelve ningún valor. 
+ */
+void ctrlz(int signum) {
+
+    signal(SIGTSTP, ctrlz);
+
+    //Declaraciones
+    char *error = NULL;
+    char *line = malloc(COMMAND_LINE_SIZE);
+    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
+
+    //Ver que haya algún proceso en foreground
+    if (jobs_list[0].pid > 0)   {
+        /* 
+            Copiar nombre de programa y la linea de comando del proceso en
+            para poder modificarlos y compararles
+        */
+        pnamecpy = strcpy(pnamecpy, program_name); //Copia program_name
+        strcat(pnamecpy, "\n");
+
+        char *delim = " ";
+        line = strcpy(line, jobs_list[0].command_line); //Copia linea de
+        line = strtok(line, delim);                     //proceso en fg
+
+        //Comparar que el proceso en foreground no sea el shell
+        if (strcmp(line, pnamecpy) != 0) {
+
+            kill(jobs_list[0].pid, SIGTSTP);
+            puts("\nParamos el proceso en foreground.");
+            jobs_list[0].status = 'D';
+
+            //PENDIENTE
+
+           /* 
+           -> Añadir los datos del proceso detenido a job_list[n_pids] utilizando jobs_list_add().
+           -> Resetear los datos de job_list[0] ya que el proceso ha dejado de ejecutarse en foreground.
+           */
+
+        }
+        else  {
+            imprime_error("\nSeñal SIGTSTP no enviada debido a que el proceso en foreground es el shell");
+        }
+    }
+    else   {
+
+        imprime_error("\nSeñal SIGTSTP no enviada debido a que no hay proceso en foreground");
+    }
+
+    //Libera variables locales auxiliares
+    free(line);
+    free(pnamecpy);
+
+}
+
+/**
+ * Comprueba si la línea de comandos contiene el símbolo "&" al final. Eso 
+ * indica que dicha línea deberá ejecutarse en "background". 
+ * 
+ * Parámetros: 
+ *              + char **args: Línea de comandos.  
+ * Return: 
+ *              + Devuelve 0 si no finaliza con "&". 
+ *                Devuelve 1 si finaliza con "&". 
+ *            
+ */
+int is_background (char **args) {
+  int i = 0;
+  while (args[i] != NULL) {
+    i++;
+  }
+  if (strcmp(args[i-1], "&") == 0) {
+    args[i-1] = NULL;
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * Encargado de añadir un nuevo trabajo en caso de que no se haya llegado al 
+ * número de trabajos máximo. 
+ * 
+ * Parámetros: 
+ *            + pid_t pid: PID del proceso que estará asociado al nuevo trabajo. 
+ *            + char status: Estado del proceso. (D (Detenido), E (Ejecutando)).
+ *            + char *command_line: Línea de comandos. 
+ * Return: 
+ *            + Devuelve 0 si el proceso se ha podido llevar a cabo. (Límite
+ *              de trabajos no superado). 
+ *            + Devuelve 1 si el proceso ha fallado. (Límite de trabajos 
+ *              superado).
+ */
+int jobs_list_add(pid_t pid, char status, char *command_line){
+    if (n_pids < ARGS_SIZE){
+        n_pids++;
+        jobs_list[n_pids].pid = pid;
+        jobs_list[n_pids].status = status;
+        strcpy(jobs_list[n_pids].command_line, command_line);
+        return 0;
+    }else{
+        return -1;
+    }
+}
+
+/**
+ * Busca dentro del array de trabajos a través del PID. 
+ * 
+ * Parámetros: 
+ *              + pid_t PID: PID del proceso asociado al trabajo que se desea
+ *                buscar. 
+ * Return:
+ *              + Devuelve la posición dentro del array de trabajos del trabajo 
+ *                que corresponde con el PID que se ha pasado por parámetro.     
+ */
+int jobs_list_find(pid_t pid) {
+  int pos = 1;
+  while (jobs_list[pos].pid != pid){
+    pos++; 
+  } 
+  return pos;
+}
+
+/**
+ * Elimina el trabajo especificado en la parte paramétrica. Mueve el registro
+ * del último proceso de la lista a la posición del que eliminamos. 
+ * Se decrementa la variable global "n_pids". 
+ * 
+ * Parámetros
+ *              + int pos: Posición del elemento que se desea eliminar. 
+ * Return: 
+ *              + Devuelve 0 si el proceso ha concurrido correctamente. 
+ */
+int jobs_list_remove(int pos) {
+    if (pos < n_pids){
+        jobs_list[pos] = jobs_list[n_pids];
+    }
+    n_pids--;
+    return 0;
+}
+/******************************************************************************
+                             FUNCIONES DE APOYO
+******************************************************************************/
+
+
+
+
+/**
  * Metodo que imprime a través de la salida estandar de errores un mensaje
  * indicando:
  *      Número de error (errno): mensaje de error.
@@ -748,90 +905,7 @@ int check_formato(char *argument) {
     }
 }
 
-/**
- * Comprueba si la línea de comandos contiene el símbolo "&" al final. Eso 
- * indica que dicha línea deberá ejecutarse en "background". 
- * 
- * Parámetros: 
- *              + char **args: Línea de comandos.  
- * Return: 
- *              + Devuelve 0 si no finaliza con "&". 
- *                Devuelve 1 si finaliza con "&". 
- *            
- */
-int is_background (char **args) {
-  int i = 0;
-  while (args[i] != NULL) {
-    i++;
-  }
-  if (strcmp(args[i-1], "&") == 0) {
-    args[i-1] = NULL;
-    return 1;
-  }
-  return 0;
-}
 
-/**
- * Encargado de añadir un nuevo trabajo en caso de que no se haya llegado al 
- * número de trabajos máximo. 
- * 
- * Parámetros: 
- *            + pid_t pid: PID del proceso que estará asociado al nuevo trabajo. 
- *            + char status: Estado del proceso. (D (Detenido), E (Ejecutando)).
- *            + char *command_line: Línea de comandos. 
- * Return: 
- *            + Devuelve 0 si el proceso se ha podido llevar a cabo. (Límite
- *              de trabajos no superado). 
- *            + Devuelve 1 si el proceso ha fallado. (Límite de trabajos 
- *              superado).
- */
-int jobs_list_add(pid_t pid, char status, char *command_line){
-    if (n_pids < ARGS_SIZE){
-        n_pids++;
-        jobs_list[n_pids].pid = pid;
-        jobs_list[n_pids].status = status;
-        strcpy(jobs_list[n_pids].command_line, command_line);
-        return 0;
-    }else{
-        return -1;
-    }
-}
-
-/**
- * Busca dentro del array de trabajos a través del PID. 
- * 
- * Parámetros: 
- *              + pid_t PID: PID del proceso asociado al trabajo que se desea
- *                buscar. 
- * Return:
- *              + Devuelve la posición dentro del array de trabajos del trabajo 
- *                que corresponde con el PID que se ha pasado por parámetro.     
- */
-int jobs_list_find(pid_t pid) {
-  int pos = 1;
-  while (jobs_list[pos].pid != pid){
-    pos++; 
-  } 
-  return pos;
-}
-
-/**
- * Elimina el trabajo especificado en la parte paramétrica. Mueve el registro
- * del último proceso de la lista a la posición del que eliminamos. 
- * Se decrementa la variable global "n_pids". 
- * 
- * Parámetros
- *              + int pos: Posición del elemento que se desea eliminar. 
- * Return: 
- *              + Devuelve 0 si el proceso ha concurrido correctamente. 
- */
-int jobs_list_remove(int pos) {
-    if (pos < n_pids){
-        jobs_list[pos] = jobs_list[n_pids];
-    }
-    n_pids--;
-    return 0;
-}
 
 /**
  * Función que imprime por pantalla información relacionada con el proceso. 
@@ -863,70 +937,7 @@ int internal_jobs2() {
 
 }
 
-/**
- * Esta función se encarga de recoger y tratar la señal SIGTSTP que genera la 
- * combinación de teclas Ctrl + z. Se comprueba si hay procesos en foreground 
- * y de ser así, se comprueba si el proceso que está en foreground es el
- * minishell. Si es el minishell se notifica por pantalla, sino, se detiene el 
- * proceso correspondiente y se modifican sus datos. 
- * 
- * Si no hay procesos en foreground, simplemente se notifica a través de 
- * pantalla. 
- * 
- * Parámetros: 
- *            +signum: Número de la señal que recibe: SIGTSTP.
- * Return: 
- *            +Método void. No devuelve ningún valor. 
- */
-void ctrlz(int signum) {
 
-    //Declaraciones
-    char *error = NULL;
-    char *line = malloc(COMMAND_LINE_SIZE);
-    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
-
-    //Ver que haya algún proceso en foreground
-    if (jobs_list[0].pid > 0)   {
-        /* 
-            Copiar nombre de programa y la linea de comando del proceso en
-            para poder modificarlos y compararles
-        */
-        pnamecpy = strcpy(pnamecpy, program_name); //Copia program_name
-        strcat(pnamecpy, "\n");
-
-        char *delim = " ";
-        line = strcpy(line, jobs_list[0].command_line); //Copia linea de
-        line = strtok(line, delim);                     //proceso en fg
-
-        //Comparar que el proceso en foreground no sea el shell
-        if (strcmp(line, pnamecpy) != 0) {
-
-            kill(jobs_list[0].pid, SIGTSTP);
-            puts("\nParamos el proceso en foreground.");
-            jobs_list[0].status = 'D';
-
-            //PENDIENTE
-
-           /* 
-           -> Añadir los datos del proceso detenido a job_list[n_pids] utilizando jobs_list_add().
-           -> Resetear los datos de job_list[0] ya que el proceso ha dejado de ejecutarse en foreground.
-           */
-
-        }
-        else  {
-            imprime_error("Señal SIGTSTP no enviada debido a que el proceso en foreground es el shell");
-        }
-    }
-    else   {
-
-        imprime_error("Señal SIGTSTP no enviada debido a que no hay proceso en foreground");
-    }
-
-    //Libera variables locales auxiliares
-    free(line);
-    free(pnamecpy);
-
-}
 
 
 

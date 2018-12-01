@@ -48,18 +48,18 @@ int internal_cd(char **args);
 int internal_export(char **args);
 int internal_source(char **args);
 int internal_jobs(char **args);
-int internal_jobs2();
-
-/**
- * FUNCIONES AUXILIARES
- */
-void ctrlz(int signum);
 void reaper(int signum);
 void ctrlc(int signum);
-void imprime_error(char *mensaje_error);
-void print_prompt();
-int check_formato();
+void ctrlz(int signum);
 int is_background (char **args);
 int jobs_list_add(pid_t pid, char status, char *command_line);
 int jobs_list_find(pid_t pid);
 int jobs_list_remove(int pos);
+
+/**
+ * FUNCIONES AUXILIARES
+ */
+void imprime_error(char *mensaje_error);
+void print_prompt();
+int check_formato();
+int internal_jobs2();
