@@ -769,10 +769,6 @@ int jobs_list_remove(int pos) {
 /******************************************************************************
                              FUNCIONES DE APOYO
 ******************************************************************************/
-
-
-
-
 /**
  * Metodo que imprime a través de la salida estandar de errores un mensaje
  * indicando:
@@ -904,8 +900,6 @@ int check_formato(char *argument) {
         return -1;
     }
 }
-
-
 
 /**
  * Función que imprime por pantalla información relacionada con el proceso. 
