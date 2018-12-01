@@ -1,3 +1,7 @@
+01/12/2018
+
+En este nivel se implementarán las funcionalidades de los comandos internos internal_jobs(), bg(), y fg(). Además, se implementa el manejo del Ctrl+Z.
+
 30/11/2018
 
 A QUIEN PUEDA INTERESAR:
@@ -12,3 +16,4 @@ El objetivo del proyecto es emular el funcionamiento del Shell Bash implementand
 	-Comandos externos
 	-Tratamiento de señales
 	-Llamadas de sistema de C
+
