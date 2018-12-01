@@ -110,7 +110,10 @@ char *read_line(char *line) {
 int execute_line(char *line) {
     
     //Exit cuando Ctrl+D es presionado y se devuelve un puntero NULL.
-    if (line == 0) exit(1);
+    if (line == 0) {
+        puts(""); //Salto de linea al volver a Bash.
+        exit(1);
+    }
 
     //Declaraciones
     char **args = malloc(ARGS_SIZE);
@@ -790,7 +793,7 @@ void imprime_error(char *mensaje_error) {
     } else {
         fprintf(stderr, ROJO_F"%s", mensaje_error);
     }
-    fprintf(stderr, RESET_COLOR"%s\n", "");
+    fprintf(stderr, RESET_COLOR"%s", "");
 }
 
 /**
