@@ -118,6 +118,7 @@ int execute_line(char *line) {
     //Declaraciones
     char **args = malloc(ARGS_SIZE);
     char *linecpy = malloc(COMMAND_LINE_SIZE);
+    int is_bg = 0;
     
     //Copia para procesos hijos en ejecución
     linecpy = strcpy(linecpy,line);
@@ -125,6 +126,8 @@ int execute_line(char *line) {
     int nTokens;
 
     nTokens = parse_args(args, line); //Nro. de Tokens obtenidos.
+
+    is_bg = is_background(args);
 
     //Check si el comando ha sido un comando interno o externo
     if (check_internal(args) == 0) {
@@ -142,7 +145,8 @@ int execute_line(char *line) {
         //Código para proceso hijo
         if (cpid == 0) {
             
-            signal(SIGINT, SIG_IGN); //AGREGAR EN NIVEL 5
+            signal(SIGINT, SIG_IGN);
+            signal(SIGTSTP, SIG_IGN);
             signal(SIGCHLD, SIG_DFL);
 
             printf("[execute_line(): PID proceso padre: %d (%s)]\n", getppid(), program_name);
@@ -156,21 +160,31 @@ int execute_line(char *line) {
         }
         
         //Código para proceso padre:  
+        char *linecop;
+        //Determinar si se trata de proceso en fg o bg
+        if (is_bg) {
+            //Añadir de información de proceso a lista en bg.
+            if (jobs_list_add(cpid, 'E', linecpy) == -1) {
+                kill(cpid,9); //En caso de error añadiendo trabajo en jobs_list
+                imprime_error("\nError añadiendo trabajo en background. Abortando.");
+            }
 
-        //Guardar información de proceso en foreground
-        jobs_list[0].pid = cpid;
-        jobs_list[0].status = 'E';
-        char *linecop = &jobs_list[0].command_line[0];
-        linecop = strcpy(linecop, linecpy);
+        } else {
 
-        //Enviar señal al enterrador de hijos
-        signal(SIGCHLD, reaper);
-        signal(SIGINT, ctrlc);
+            //Guardar información de proceso en foreground
+            jobs_list[0].pid = cpid;
+            jobs_list[0].status = 'E';
+            linecop = &jobs_list[0].command_line[0];
+            strcpy(jobs_list[0].command_line, linecpy);     //Prueba de funcionamiento
 
-        while (jobs_list[0].pid != 0) {
-            pause();
+            //Enviar señal al enterrador de hijos
+            signal(SIGCHLD, reaper);
+            signal(SIGINT, ctrlc);
+
+            while (jobs_list[0].pid != 0) {
+                pause();
+            }   
         }
-
     }
 
     //Libera variables locales auxiliares
@@ -696,7 +710,7 @@ void ctrlz(int signum) {
  *                Devuelve 1 si finaliza con "&". 
  *            
  */
-int is_background (char **args) {
+int is_background(char **args) {
   int i = 0;
   while (args[i] != NULL) {
     i++;
@@ -919,6 +933,10 @@ int check_formato(char *argument) {
 
 //Discutir el nombre de la función
 int internal_jobs2() {
+
+    for (int i = 1; i < ARGS_SIZE; i++) {
+
+    }
 
   //Falta poner el identificador de trabajo. 
   printf("[internal_jobs(): Identificador de trabajo: \n");
