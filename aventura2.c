@@ -65,17 +65,9 @@ void main(int argc, char *argv[]) {
 char *read_line(char *line) {
     char *command = fgets(line, COMMAND_LINE_SIZE, stdin);
 
-    /*
-        PREGUNTAR A PROFESORA:
-
-        En la documentación del nivel 4 se dice que hay que comprobar en caso 
-        de que: la linea leída sea NULL, y que no se haya producido un EOF.
-        (¿Quiere decir que no se haya llegado al final de fichero, por tanto:
-        feof(stdin) habría de ser == 0?)
-
-        Creo que es bastante claro que es una estructura de control para en
-        caso de tener una linea vacía y presionar Ctrl-D evitar un Core-Dumped
-    */
+    /*Chequear en casos de que la linea que entra sea NULL y no se haya
+    encontrado el final de fichero del stdin.
+    Casos como después de presionar Ctrl+C o Ctrl+Z*/
     if (!command && !feof(stdin)) {
         command = line;
         command[0] = 0;
@@ -122,6 +114,8 @@ int execute_line(char *line) {
     
     //Copia para procesos hijos en ejecución
     linecpy = strcpy(linecpy,line);
+    char *delim = "\n";
+    linecpy = strtok(linecpy,delim);    //Eliminar '\n' de la linea
 
     int nTokens;
 
@@ -149,9 +143,10 @@ int execute_line(char *line) {
             signal(SIGTSTP, SIG_IGN);
             signal(SIGCHLD, SIG_DFL);
 
-            printf("[execute_line(): PID proceso padre: %d (%s)]\n", getppid(), program_name);
-            printf("[execute_line(): PID proceso hijo: %d (%s)]\n", getpid(), args[0]);
-
+            if (!is_bg) {
+                printf("[execute_line(): PID proceso padre: %d (%s)]\n", getppid(), program_name);
+                printf("[execute_line(): PID proceso hijo: %d (%s)]\n", getpid(), args[0]);
+            }
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
                 fprintf(stderr, "%s\n", strerror(errno));
@@ -161,11 +156,16 @@ int execute_line(char *line) {
         
         //Código para proceso padre:  
         char *linecop;
+        //Enviar señal al enterrador de hijos
+        signal(SIGCHLD, reaper);
+        signal(SIGINT, ctrlc);
+
         //Determinar si se trata de proceso en fg o bg
         if (is_bg) {
+
             //Añadir de información de proceso a lista en bg.
             if (jobs_list_add(cpid, 'E', linecpy) == -1) {
-                kill(cpid,9); //En caso de error añadiendo trabajo en jobs_list
+                kill(cpid, 9); //En caso de error añadiendo trabajo en jobs_list
                 imprime_error("\nError añadiendo trabajo en background. Abortando.");
             }
 
@@ -174,13 +174,8 @@ int execute_line(char *line) {
             //Guardar información de proceso en foreground
             jobs_list[0].pid = cpid;
             jobs_list[0].status = 'E';
-            linecop = &jobs_list[0].command_line[0];
             strcpy(jobs_list[0].command_line, linecpy);     //Prueba de funcionamiento
-
-            //Enviar señal al enterrador de hijos
-            signal(SIGCHLD, reaper);
-            signal(SIGINT, ctrlc);
-
+            
             while (jobs_list[0].pid != 0) {
                 pause();
             }   
@@ -488,8 +483,25 @@ int internal_source(char **args) {
     return 1;
 }
 
+/**
+ * Función que imprime por pantalla información relacionada con el proceso. 
+ * Mostrará por pantalla: 
+ * 
+ *          - Identificador de trabajo.
+ *          - PID del proceso.
+ *          - Línea de comandos. 
+ *          - Estado (D (Detenido), E (Ejecutando)).
+ * 
+ * No necesita ningún parámetro de entrada para funcionar. No devuelve ningún
+ * valor.
+ */
 int internal_jobs(char **args) {
 
+    for (int i = 1; i <= n_pids; i++) {
+        //Imprimir info de cada job
+        printf("[internal_jobs(): +[%d] PID: %d | S: %c | Command: %s]\n",i
+        , jobs_list[i].pid,jobs_list[i].status, jobs_list[i].command_line);
+    }
     return 1;
 }
 
@@ -520,9 +532,21 @@ void reaper(int signum) {
     //Check errores en wait()
     while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0) {
         if (pid == jobs_list[0].pid) {
+            /*Si el job terminado es el trabajo el foreground, resetear
+            jobs_list[0]*/
             jobs_list[0].pid = 0;
             jobs_list[0].status = 'F';
             jobs_list[0].command_line[0] = '\0';
+
+        } else {
+            /*Si el job terminado no es el trabajo en foreground, quitar de la
+            lista*/
+            int fnsh_job;
+            if (fnsh_job = jobs_list_find(pid) == -1) { //check for errors
+                imprime_error("\nError en jobs_list_find.\n");
+            }
+            jobs_list_remove(fnsh_job);
+
         }
 
         //Indicar razón de finalización de proceso hijo.
@@ -569,7 +593,7 @@ void ctrlc(int signum) {
             para poder modificarlos y compararles
         */
         pnamecpy = strcpy(pnamecpy, program_name); //Copia program_name
-        strcat(pnamecpy, "\n");
+        //strcat(pnamecpy, "\n");
 
         char *delim = " ";
         line = strcpy(line, jobs_list[0].command_line); //Copia linea de
@@ -742,6 +766,7 @@ int jobs_list_add(pid_t pid, char status, char *command_line){
         jobs_list[n_pids].pid = pid;
         jobs_list[n_pids].status = status;
         strcpy(jobs_list[n_pids].command_line, command_line);
+        printf("[jobs_list_add: +[%d]:  (%s)]\n",n_pids, jobs_list[n_pids].command_line);
         return 0;
     }else{
         return -1;
@@ -756,13 +781,16 @@ int jobs_list_add(pid_t pid, char status, char *command_line){
  *                buscar. 
  * Return:
  *              + Devuelve la posición dentro del array de trabajos del trabajo 
- *                que corresponde con el PID que se ha pasado por parámetro.     
+ *                que corresponde con el PID que se ha pasado por parámetro.
+ * 
+ *              + (-1) si no ha encontrado el PID.    
  */
 int jobs_list_find(pid_t pid) {
   int pos = 1;
-  while (jobs_list[pos].pid != pid){
+  while (pos <= n_pids && jobs_list[pos].pid != pid){
     pos++; 
-  } 
+  }
+  if (pos > n_pids) return -1; 
   return pos;
 }
 
