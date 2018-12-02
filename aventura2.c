@@ -33,10 +33,8 @@ void main(int argc, char *argv[]) {
     signal(SIGINT, ctrlc);
     signal(SIGTSTP, ctrlz);
 
-    //Inicializar estructura jobs_list[]
-    jobs_list[0].pid = 0;
-    jobs_list[0].status = 'F';
-    jobs_list[0].command_line[0] = '\0';
+    //Inicializar estructura jobs_list[0]
+    reset_jobs_list_fg();
 
     print_prompt();
 
@@ -68,11 +66,20 @@ char *read_line(char *line) {
     /*Chequear en casos de que la linea que entra sea NULL y no se haya
     encontrado el final de fichero del stdin.
     Casos como después de presionar Ctrl+C o Ctrl+Z*/
+    //printf("Command: %s | feof: %d\n",command,feof(stdin));                                  //DEBUG
     if (!command && !feof(stdin)) {
         command = line;
         command[0] = 0;
         puts("");
     }
+    
+
+    /*CHECK COMO RESETEAR FEOF PARA CASOS DONDE SE PRESIONO CTRL+D CON UN 
+      ELEMENTO EN LINEA Y LUEGO EN NUEVO PROMPT SE PRESIONA CTRL+Z O CTRL+C*/
+
+
+    //En caso de presionar Ctrl+D con un elemento, agregar salto de linea.
+    if (command && feof(stdin)) puts("");
 
     fflush(stdin);
     return command;
@@ -121,7 +128,7 @@ int execute_line(char *line) {
 
     nTokens = parse_args(args, line); //Nro. de Tokens obtenidos.
 
-    is_bg = is_background(args);
+    is_bg = is_background(args);    //Ver si la función a ejecutar es fg o bg
 
     //Check si el comando ha sido un comando interno o externo
     if (check_internal(args) == 0) {
@@ -130,7 +137,6 @@ int execute_line(char *line) {
 
         //Creación de proceso hijo para ejecutar comando externo
         cpid = fork();
-        
         if (cpid == -1) {   //Check errores en fork()
             fprintf(stderr, "%s\n", strerror(errno));
             return -1;
@@ -138,7 +144,6 @@ int execute_line(char *line) {
 
         //Código para proceso hijo
         if (cpid == 0) {
-            
             signal(SIGINT, SIG_IGN);
             signal(SIGTSTP, SIG_IGN);
             signal(SIGCHLD, SIG_DFL);
@@ -147,6 +152,7 @@ int execute_line(char *line) {
                 printf("[execute_line(): PID proceso padre: %d (%s)]\n", getppid(), program_name);
                 printf("[execute_line(): PID proceso hijo: %d (%s)]\n", getpid(), args[0]);
             }
+
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
                 fprintf(stderr, "%s\n", strerror(errno));
@@ -156,13 +162,13 @@ int execute_line(char *line) {
         
         //Código para proceso padre:  
         char *linecop;
+
         //Enviar señal al enterrador de hijos
         signal(SIGCHLD, reaper);
         signal(SIGINT, ctrlc);
 
         //Determinar si se trata de proceso en fg o bg
         if (is_bg) {
-
             //Añadir de información de proceso a lista en bg.
             if (jobs_list_add(cpid, 'E', linecpy) == -1) {
                 kill(cpid, 9); //En caso de error añadiendo trabajo en jobs_list
@@ -539,10 +545,12 @@ void reaper(int signum) {
         } else {
             /*Si el job terminado no es el trabajo en foreground, quitar de la
             lista*/
-            int fnsh_job;
-            if (fnsh_job = jobs_list_find(pid) == -1) { //check for errors
+            int fnsh_job = jobs_list_find(pid);
+
+            if (fnsh_job == -1) { //check for errors
                 imprime_error("\nError en jobs_list_find.\n");
             }
+
             jobs_list_remove(fnsh_job);
 
         }
@@ -694,7 +702,7 @@ void ctrlz(int signum) {
         //Comparar que el proceso en foreground no sea el shell
         if (strcmp(line, pnamecpy) != 0) {
 
-            kill(jobs_list[0].pid, SIGTSTP);
+            kill(jobs_list[0].pid, SIGSTOP);
             puts("\nParamos el proceso en foreground.");
             jobs_list[0].status = 'D';
 
@@ -737,9 +745,14 @@ void ctrlz(int signum) {
  */
 int is_background(char **args) {
     int i = 0;
-    while (args[i] != NULL) {
+
+    //En caso de que llegue String vacío (Ej. CtrlZ || CtrlC con comando vacio)
+    if (args[i] == NULL) return -1;
+
+    while (args[i] != NULL) {   
         i++;
     }
+
     //Check si el último argumento contiene &
     if (strchr(args[i-1], '&')) {
         /*Si el último argumento contiene &, pero no está separado por un 
@@ -791,12 +804,12 @@ int jobs_list_add(pid_t pid, char status, char *command_line){
  *              + (-1) si no ha encontrado el PID.    
  */
 int jobs_list_find(pid_t pid) {
-  int pos = 1;
-  while (pos <= n_pids && jobs_list[pos].pid != pid){
-    pos++; 
-  }
-  if (pos > n_pids) return -1; 
-  return pos;
+    int pos = 1;
+    while (pos <= n_pids && jobs_list[pos].pid != pid){
+        pos++; 
+    }
+    if (pos > n_pids) return -1;
+    return pos;
 }
 
 /**
@@ -816,6 +829,7 @@ int jobs_list_remove(int pos) {
     n_pids--;
     return 0;
 }
+
 /******************************************************************************
                              FUNCIONES DE APOYO
 ******************************************************************************/
@@ -985,6 +999,15 @@ int internal_jobs2() {
 
 }
 
+/**
+ * Función que resetea los valores de la posición en jobs_list reservada
+ * para trabajos en foreground.
+ * 
+ * Parámetros:
+ *          + Función no recibe parámetros.
+ * Devuelve:
+ *          + Función no devuelve nada.
+ */
 void reset_jobs_list_fg() {
     jobs_list[0].pid = 0;
     jobs_list[0].status = 'F';
