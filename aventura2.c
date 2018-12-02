@@ -534,9 +534,7 @@ void reaper(int signum) {
         if (pid == jobs_list[0].pid) {
             /*Si el job terminado es el trabajo el foreground, resetear
             jobs_list[0]*/
-            jobs_list[0].pid = 0;
-            jobs_list[0].status = 'F';
-            jobs_list[0].command_line[0] = '\0';
+            reset_jobs_list_fg();
 
         } else {
             /*Si el job terminado no es el trabajo en foreground, quitar de la
@@ -687,7 +685,7 @@ void ctrlz(int signum) {
             para poder modificarlos y compararles
         */
         pnamecpy = strcpy(pnamecpy, program_name); //Copia program_name
-        strcat(pnamecpy, "\n");
+        //strcat(pnamecpy, "\n");               //MODIFICADO POR AJUSTE EN LINEA
 
         char *delim = " ";
         line = strcpy(line, jobs_list[0].command_line); //Copia linea de
@@ -706,6 +704,9 @@ void ctrlz(int signum) {
            -> Añadir los datos del proceso detenido a job_list[n_pids] utilizando jobs_list_add().
            -> Resetear los datos de job_list[0] ya que el proceso ha dejado de ejecutarse en foreground.
            */
+
+            jobs_list_add(jobs_list[0].pid, jobs_list[0].status, jobs_list[0].command_line);
+            reset_jobs_list_fg();
 
         }
         else  {
@@ -735,15 +736,19 @@ void ctrlz(int signum) {
  *            
  */
 int is_background(char **args) {
-  int i = 0;
-  while (args[i] != NULL) {
-    i++;
-  }
-  if (strcmp(args[i-1], "&") == 0) {
-    args[i-1] = NULL;
-    return 1;
-  }
-  return 0;
+    int i = 0;
+    while (args[i] != NULL) {
+        i++;
+    }
+    //Check si el último argumento contiene &
+    if (strchr(args[i-1], '&')) {
+        /*Si el último argumento contiene &, pero no está separado por un 
+        espacio, se elimina el &*/
+        char *delim = "&";
+        args[i-1] = strtok(args[i-1], delim);
+        return 1;
+    }
+    return 0;
 }
 
 /**
@@ -978,6 +983,12 @@ int internal_jobs2() {
   //Imprimir estado del proceso. 
   printf("[internal_jobs(): Estado: %d\n", jobs_list[0].status); 
 
+}
+
+void reset_jobs_list_fg() {
+    jobs_list[0].pid = 0;
+    jobs_list[0].status = 'F';
+    jobs_list[0].command_line[0] = '\0';
 }
 
 

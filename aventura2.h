@@ -63,3 +63,4 @@ void imprime_error(char *mensaje_error);
 void print_prompt();
 int check_formato();
 int internal_jobs2();
+void reset_jobs_list_fg();
