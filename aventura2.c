@@ -513,6 +513,47 @@ int internal_jobs(char **args) {
 }
 
 /**
+ * El comando interno bg reanuda la ejecución de un proceso detenido
+ * pero en segundo plano.
+ *
+ * Parámetros:
+ *          +args: Doble puntero que contiene el comando introducido separado
+ *                 en tokens.
+ * Devuelve:
+ *          +1: si todo se ha ejecutado sin problemas.
+ *          +(-1): Si hubo errores.
+ */
+int internal_bg(char **args) {
+    //Declaraciones
+    int job_id;
+
+    /*Si el primer argumento de bg es vacío, entonces ejecutar último proceso
+    agregado*/
+    if (*args[1] == NULL) job_id = n_pids; 
+}
+
+/**
+ * El comando interno bg reanuda la ejecución de un proceso detenido
+ * pero en primer plano.
+ *
+ * Parámetros:
+ *          +args: Doble puntero que contiene el comando introducido separado
+ *                 en tokens.
+ * Devuelve:
+ *          +1: si todo se ha ejecutado sin problemas.
+ *          +(-1): Si hubo errores.
+ */
+int internal_fg(char **args) {
+    //Declaraciones
+    int job_id;
+
+    /*Si el primer argumento de bg es vacío, entonces ejecutar último proceso
+    agregado*/
+    if (*args[1] == NULL) job_id = n_pids; 
+
+}
+
+/**
  * Función que se encarga de 'enterrar' procesos hijos de un proceso para
  * evitar la existencia de procesos zombies en la tabla de procesos.
  * 
@@ -588,13 +629,14 @@ void ctrlc(int signum) {
     //Porque esta linea? Esta en el main ya.
     signal(SIGINT, ctrlc);
 
-    //Declaraciones
-    char *error = NULL; 
-    char *line = malloc(COMMAND_LINE_SIZE);
-    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
-    
     //Ver que haya algún proceso en foreground
     if (jobs_list[0].pid > 0) {
+
+        //Declaraciones
+        char *error = NULL; 
+        char *line = malloc(COMMAND_LINE_SIZE);
+        char *pnamecpy = malloc(COMMAND_LINE_SIZE);
+
         /* 
             Copiar nombre de programa y la linea de comando del proceso en
             para poder modificarlos y compararles
@@ -682,13 +724,14 @@ void ctrlz(int signum) {
 
     signal(SIGTSTP, ctrlz);
 
-    //Declaraciones
-    char *error = NULL;
-    char *line = malloc(COMMAND_LINE_SIZE);
-    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
-
     //Ver que haya algún proceso en foreground
     if (jobs_list[0].pid > 0)   {
+
+        //Declaraciones
+        char *error = NULL;
+        char *line = malloc(COMMAND_LINE_SIZE);
+        char *pnamecpy = malloc(COMMAND_LINE_SIZE);
+
         /* 
             Copiar nombre de programa y la linea de comando del proceso en
             para poder modificarlos y compararles
