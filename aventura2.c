@@ -81,6 +81,7 @@ char *read_line(char *line) {
     //En caso de presionar Ctrl+D con un elemento, agregar salto de linea.
     if (command && feof(stdin)) puts("");
 
+    clearerr(stdin);    //Resetear el indicador de EOF y de errores del STDIN
     fflush(stdin);
     return command;
 }

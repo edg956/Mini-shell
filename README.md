@@ -1,6 +1,7 @@
 03/12/2018
 
-Último commit realizado el 02/12/2018 dice que los errores de violación de segmento han sido arreglados. UPDATE: Siguen estando los errores.
+Arreglado el cierre inesperado del shell después de realizar Ctrl+C o Ctrl+Z, posterior a haber realizado un Ctrl+D con una linea no vac
+ia.
 
 FUNCIONALIDADES DE NIVEL IMPLEMENTADAS:
 
