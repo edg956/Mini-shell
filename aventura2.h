@@ -66,3 +66,4 @@ void print_prompt();
 int check_formato();
 int internal_jobs2();
 void reset_jobs_list_fg();
+int solo_numeros(const char *str);

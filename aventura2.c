@@ -3,8 +3,9 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <errno.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include "aventura2.h"
 #include <sys/types.h>
 #include <signal.h>
@@ -73,11 +74,6 @@ char *read_line(char *line) {
         puts("");
     }
     
-
-    /*CHECK COMO RESETEAR FEOF PARA CASOS DONDE SE PRESIONO CTRL+D CON UN 
-      ELEMENTO EN LINEA Y LUEGO EN NUEVO PROMPT SE PRESIONA CTRL+Z O CTRL+C*/
-
-
     //En caso de presionar Ctrl+D con un elemento, agregar salto de linea.
     if (command && feof(stdin)) puts("");
 
@@ -125,9 +121,7 @@ int execute_line(char *line) {
     char *delim = "\n";
     linecpy = strtok(linecpy,delim);    //Eliminar '\n' de la linea
 
-    int nTokens;
-
-    nTokens = parse_args(args, line); //Nro. de Tokens obtenidos.
+    int nTokens = parse_args(args, line); //Nro. de Tokens obtenidos.
 
     is_bg = is_background(args);    //Ver si la función a ejecutar es fg o bg
 
@@ -245,16 +239,26 @@ int check_internal(char **args){
         return -1;
     } else {
         if (strcmp(args[0], "cd") == 0) {
-              return internal_cd(args);
+            return internal_cd(args);
+
         } else if (strcmp(args[0], "export") == 0) {
-              return internal_export(args);
+            return internal_export(args);
+
         } else if (strcmp(args[0], "source") == 0 ||
                     strcmp(args[0], ".") == 0) {
-              return internal_source(args);
+            return internal_source(args);
+
         } else if (strcmp(args[0], "jobs") == 0) {
-              return internal_jobs(args);
+            return internal_jobs(args);
+
+        } else if (strcmp(args[0], "fg") == 0) {
+            return internal_fg(args);
+
+        } else if (strcmp(args[0], "bg") == 0) {
+            return internal_bg(args);
+
         } else if (strcmp(args[0], "exit") == 0) {
-              exit(0);
+            exit(0);
         } else {
             return 0;
         }
@@ -506,7 +510,7 @@ int internal_jobs(char **args) {
 
     for (int i = 1; i <= n_pids; i++) {
         //Imprimir info de cada job
-        printf("[internal_jobs(): +[%d] PID: %d | S: %c | Command: %s]\n",i
+        printf("[internal_jobs(): [%d] PID: %d | S: %c | Command: %s]\n",i
         , jobs_list[i].pid,jobs_list[i].status, jobs_list[i].command_line);
     }
     return 1;
@@ -525,11 +529,60 @@ int internal_jobs(char **args) {
  */
 int internal_bg(char **args) {
     //Declaraciones
-    int job_id;
+    int job_id = 0;
+    pid_t job_pid = 0;
 
     /*Si el primer argumento de bg es vacío, entonces ejecutar último proceso
     agregado*/
-    if (*args[1] == NULL) job_id = n_pids; 
+    if (args[1] == NULL) {
+        job_id = n_pids;
+
+        //Buscar último trabajo añadido a lista que este en estado 'D'
+        while (job_id > 0 && jobs_list[job_id].status != 'D') {
+            job_id--;
+        }
+
+        if (job_id == 0) return 1; //No se ha conseguido un trabajo ejecutable
+
+    } else if (args[2] != NULL) { //Check excedencia de argumentos
+
+        puts("bg: Demasiados argumentos.");
+        return 1;
+
+    } else {
+        char *arg = malloc(sizeof(args[1]));
+        arg = strcpy(arg, args[1]);
+
+        //Check si contiene el caracter '%'
+        if (strchr(arg, '%')) arg++;
+
+        //Check si el argumento contiene solo números (incluso precedido de %)
+        if (!solo_numeros(arg)) {
+            puts("bg: Número de trabajo inválido.");
+            return 1;
+        }
+
+        //Obtener entero desde String
+        job_id = atoi(arg);
+
+        //Check si el job_id existe en el jobs_list
+        if (!(job_id > 0 && job_id <= n_pids)) {
+            puts("bg: Número de trabajo no existe.");
+            return 1;
+        }
+
+        //Retornar puntero a valor original si hace falta
+        if (strchr(args[1],'%')) arg--;
+        free(arg); //Free resources
+    }
+
+    if (jobs_list[job_id].status != 'D') return 1;
+    //Actualizar información del trabajo en jobs_list y obtener su pid
+    jobs_list[job_id].status = 'E';
+
+    kill(jobs_list[job_id].pid, SIGCONT);
+
+    return 1;
 }
 
 /**
@@ -544,13 +597,72 @@ int internal_bg(char **args) {
  *          +(-1): Si hubo errores.
  */
 int internal_fg(char **args) {
-    //Declaraciones
-    int job_id;
+        //Declaraciones
+    int job_id = 0;
+    pid_t job_pid = 0;
 
     /*Si el primer argumento de bg es vacío, entonces ejecutar último proceso
     agregado*/
-    if (*args[1] == NULL) job_id = n_pids; 
+    if (args[1] == NULL) {
+        job_id = n_pids;
 
+        //Buscar último trabajo añadido a lista que este en estado 'D'
+        while (job_id > 0 && jobs_list[job_id].status != 'D') {
+            job_id--;
+        }
+
+        if (job_id == 0) return 1; //No se ha conseguido un trabajo ejecutable
+
+    } else if (args[2] != NULL) { //Check excedencia de argumentos
+
+        puts("fg: Demasiados argumentos.");
+        return 1;
+
+    } else {
+        char *arg = malloc(sizeof(args[1]));
+        arg = strcpy(arg, args[1]);
+
+        //Check si contiene el caracter '%'
+        if (strchr(arg, '%')) arg++;
+
+        //Check si el argumento contiene solo números (incluso precedido de %)
+        if (!solo_numeros(arg)) {
+            puts("fg: Número de trabajo inválido.");
+            return 1;
+        }
+
+        //Obtener entero desde String
+        job_id = atoi(arg);
+
+        //Check si el job_id existe en el jobs_list
+        if (!(job_id > 0 && job_id <= n_pids)) {
+            puts("fg: Número de trabajo no existe.");
+            return 1;
+        }
+
+        //Retornar puntero a valor original si hace falta
+        if (strchr(args[1],'%')) arg--;
+        free(arg); //Free resources
+    }
+
+    if (jobs_list[job_id].status != 'D') return 1;
+    //Actualizar información del trabajo en jobs_list y obtener su pid
+    jobs_list[job_id].status = 'E';
+
+    jobs_list[0] = jobs_list[job_id];
+
+    jobs_list_remove(job_id);
+
+    kill(jobs_list[job_id].pid, SIGCONT);
+
+    pid_t pid = jobs_list[job_id].pid;
+    //Esperar a que nuevo trabajo en fg termine
+    while (waitpid(-1, NULL, 0) != pid) {
+        puts("hey");
+        pause();
+    }
+
+    return 1;
 }
 
 /**
@@ -590,11 +702,10 @@ void reaper(int signum) {
             int fnsh_job = jobs_list_find(pid);
 
             if (fnsh_job == -1) { //check for errors
-                imprime_error("\nError en jobs_list_find.\n");
+                imprime_error("\nError en jobs_list_find.");
             }
 
-            jobs_list_remove(fnsh_job);
-
+                jobs_list_remove(fnsh_job);
         }
 
         //Indicar razón de finalización de proceso hijo.
@@ -629,14 +740,13 @@ void ctrlc(int signum) {
     //Porque esta linea? Esta en el main ya.
     signal(SIGINT, ctrlc);
 
+    //Declaraciones
+    char *error = NULL; 
+    char *line = malloc(COMMAND_LINE_SIZE);
+    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
+
     //Ver que haya algún proceso en foreground
     if (jobs_list[0].pid > 0) {
-
-        //Declaraciones
-        char *error = NULL; 
-        char *line = malloc(COMMAND_LINE_SIZE);
-        char *pnamecpy = malloc(COMMAND_LINE_SIZE);
-
         /* 
             Copiar nombre de programa y la linea de comando del proceso en
             para poder modificarlos y compararles
@@ -724,14 +834,13 @@ void ctrlz(int signum) {
 
     signal(SIGTSTP, ctrlz);
 
+    //Declaraciones
+    char *error = NULL;
+    char *line = malloc(COMMAND_LINE_SIZE);
+    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
+
     //Ver que haya algún proceso en foreground
-    if (jobs_list[0].pid > 0)   {
-
-        //Declaraciones
-        char *error = NULL;
-        char *line = malloc(COMMAND_LINE_SIZE);
-        char *pnamecpy = malloc(COMMAND_LINE_SIZE);
-
+    if (jobs_list[0].pid > 0)   {        
         /* 
             Copiar nombre de programa y la linea de comando del proceso en
             para poder modificarlos y compararles
@@ -821,7 +930,7 @@ int jobs_list_add(pid_t pid, char status, char *command_line){
         jobs_list[n_pids].pid = pid;
         jobs_list[n_pids].status = status;
         strcpy(jobs_list[n_pids].command_line, command_line);
-        printf("[jobs_list_add: +[%d]:  (%s)]\n",n_pids, jobs_list[n_pids].command_line);
+        printf("[jobs_list_add: [%d]+:  (%s)]\n",n_pids, jobs_list[n_pids].command_line);
         return 0;
     }else{
         return -1;
@@ -1051,6 +1160,22 @@ void reset_jobs_list_fg() {
     jobs_list[0].command_line[0] = '\0';
 }
 
+/**
+ *  Función que revisa que el String recibido contenga únicamente caracteres
+ *  numéricos
+ *  
+ *  Parámetros:
+ *          +str: el String de C a analizar.
+ *  Devuelve:
+ *          +1: Si str solo contiene números.
+ *          +0: En caso contrario.
+ */
+int solo_numeros(const char *str) {
+    while (*str) {
+        if (isdigit(*str++) == 0) return 0;
+    }
+    return 1;
+}
 
 
 
