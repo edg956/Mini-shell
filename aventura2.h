@@ -48,6 +48,8 @@ int internal_cd(char **args);
 int internal_export(char **args);
 int internal_source(char **args);
 int internal_jobs(char **args);
+int internal_bg(char **args);
+int internal_fg(char **args);
 void reaper(int signum);
 void ctrlc(int signum);
 void ctrlz(int signum);
