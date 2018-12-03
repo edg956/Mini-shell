@@ -1,3 +1,7 @@
+03/12/2018
+
+Último commit realizado el 02/12/2018 dice que los errores de violación de segmento han sido arreglados. UPDATE: Siguen estando los errores.
+
 01/12/2018
 
 En este nivel se implementarán las funcionalidades de los comandos internos internal_jobs(), bg(), y fg(). Además, se implementa el manejo del Ctrl+Z.
