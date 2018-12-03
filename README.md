@@ -2,6 +2,18 @@
 
 Último commit realizado el 02/12/2018 dice que los errores de violación de segmento han sido arreglados. UPDATE: Siguen estando los errores.
 
+FUNCIONALIDADES DE NIVEL IMPLEMENTADAS:
+
+	-Diferenciación entre primer plano y segundo plano (comandos finalizados en &)
+	-Mostrar lista de trabajos mediante comando interno jobs
+	-Detener proceso en foreground cuando se presione Ctrl+Z
+
+FUNCIONALIDADES POR IMPLEMENTAR:
+
+	-Gestión correcta y completa de la lista de procesos y su estado.
+	-Enviar un proceso detenido al foreground reactivando su ejecución, o uno del background al foreground mediante el comando interno fg.
+	-Reactivar un proceso detenido para que siga ejecutándose pero en segundo plano, mediante el comando interno bg.
+	
 01/12/2018
 
 En este nivel se implementarán las funcionalidades de los comandos internos internal_jobs(), bg(), y fg(). Además, se implementa el manejo del Ctrl+Z.
