@@ -706,13 +706,6 @@ void ctrlz(int signum) {
             puts("\nParamos el proceso en foreground.");
             jobs_list[0].status = 'D';
 
-            //PENDIENTE
-
-           /* 
-           -> Añadir los datos del proceso detenido a job_list[n_pids] utilizando jobs_list_add().
-           -> Resetear los datos de job_list[0] ya que el proceso ha dejado de ejecutarse en foreground.
-           */
-
             jobs_list_add(jobs_list[0].pid, jobs_list[0].status, jobs_list[0].command_line);
             reset_jobs_list_fg();
 
