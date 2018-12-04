@@ -68,7 +68,7 @@ char *read_line(char *line) {
     /*Chequear en casos de que la linea que entra sea NULL y no se haya
     encontrado el final de fichero del stdin.
     Casos como después de presionar Ctrl+C o Ctrl+Z*/
-    //printf("Command: %s | feof: %d\n",command,feof(stdin));                                  //DEBUG
+
     if (!command && !feof(stdin)) {
         command = line;
         command[0] = 0;
@@ -540,9 +540,11 @@ int internal_bg(char **args) {
     int job_id = 0;
     pid_t job_pid = 0;
 
-    /*Si el primer argumento de bg es vacío, entonces ejecutar último proceso
-    agregado*/
+    /*Condiciones de verificación de sintaxis para comando bg*/
     if (args[1] == NULL) {
+        /*Si el primer argumento de bg es vacío, entonces ejecutar último proceso
+        agregado*/
+
         job_id = n_pids;
 
         //Buscar último trabajo añadido a lista que este en estado 'D'
@@ -590,6 +592,9 @@ int internal_bg(char **args) {
     jobs_list[job_id].status = 'E';
 
     kill(jobs_list[job_id].pid, SIGCONT);
+    signal(SIGCHLD, reaper);
+
+    printf("[internal_bg(): [%d]+ %s]\n", job_id, jobs_list[job_id].command_line);
 
     return 1;
 }
@@ -606,19 +611,15 @@ int internal_bg(char **args) {
  *          +(-1): Si hubo errores.
  */
 int internal_fg(char **args) {
-        //Declaraciones
+    //Declaraciones
     int job_id = 0;
     pid_t job_pid = 0;
 
-    /*Si el primer argumento de fg es vacío, entonces ejecutar último proceso
-    agregado*/
+    /*CONDICIONES DE VERIFICACION DE SINTAXIS COMANDO FG*/
     if (args[1] == NULL) {
+        /*Si el primer argumento de fg es vacío, entonces ejecutar último proceso
+        agregado*/
         job_id = n_pids;
-
-        //Buscar último trabajo añadido a lista que este en estado 'D'
-        while (job_id > 0 && jobs_list[job_id].status != 'D') {
-            job_id--;
-        }
 
         if (job_id == 0) return 1; //No se ha conseguido un trabajo ejecutable
 
@@ -653,8 +654,7 @@ int internal_fg(char **args) {
         if (strchr(args[1],'%')) arg--;
         free(arg); //Free resources
     }
-
-    if (jobs_list[job_id].status != 'D') return 1;
+    /*FIN CONDICIONES*/
 
     //Actualizar información del trabajo en jobs_list y obtener su pid
     jobs_list[job_id].status = 'E';
@@ -664,12 +664,16 @@ int internal_fg(char **args) {
     jobs_list_remove(job_id);
 
     kill(pid, SIGCONT);
+    signal(SIGCHLD, reaper);
+
+    /*Modificación de la linea para quitar el & en lineas ejecutadas en bg*/    
+    
+    printf("[internal_fg(): %s]\n", jobs_list[0].command_line);
 
     //Esperar a que nuevo trabajo en fg termine
-    // while (waitpid(pid, NULL, 0) != pid) {
-    //     puts("hey");
-    //     pause();
-    // }
+    while (jobs_list[0].pid != 0) {
+        pause();
+    }
 
     return 1;
 }
@@ -700,6 +704,7 @@ void reaper(int signum) {
 
     //Check errores en wait()
     while ((pid = waitpid(-1, &wstatus, WNOHANG | WCONTINUED)) > 0) {
+
         if (pid == jobs_list[0].pid) {
             if (!WIFCONTINUED(wstatus)) {
                 /*Si el job terminado es el trabajo el foreground, resetear
@@ -713,10 +718,10 @@ void reaper(int signum) {
                 la lista*/
                 int fnsh_job = jobs_list_find(pid);
 
-                if (fnsh_job == -1) { //check for errors
+                //check for errors
+                if (fnsh_job == -1) { 
                     imprime_error("\nError en jobs_list_find.");
                 }
-                puts("WIFCONTINUED");
                 jobs_list_remove(fnsh_job);
             }
         }
@@ -728,6 +733,8 @@ void reaper(int signum) {
             printf("[reaper(): Proceso hijo %d exterminado por señal %d]\n", pid, WTERMSIG(wstatus));
         } else if (WIFSTOPPED(wstatus)) {
             printf("[reaper(): Proceso hijo %d detenido por señal %d]\n", pid, WSTOPSIG(wstatus));
+        } else if (WIFCONTINUED(wstatus)) {
+            printf("[reaper(): Proceso hijo %d continuado.]\n", pid);
         }
     }
 }
