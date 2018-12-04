@@ -1,3 +1,4 @@
 #Ignore compiled programs
 try
 .vscode
+.reformas.swp
