@@ -2,6 +2,17 @@
 
 14:16h: Retomo el proyecto con los problemas de funcionamiento de fg y bg: el waitpid() del reaper capta señal SIGCONT, y lo trata como si el proceso hubiese terminado, eliminándole de jobs_list.
 
+17:26h: Disque terminado nivel 5.
+
+FUNCIONALIDADES DE NIVEL IMPLEMENTADAS:
+
+	-Diferenciación entre primer plano y segundo plano (comandos finalizados en &)
+	-Mostrar lista de trabajos mediante comando interno jobs
+	-Detener proceso en foreground cuando se presione Ctrl+Z
+	-Gestión correcta y completa de la lista de procesos y su estado.
+	-Enviar un proceso detenido al foreground reactivando su ejecución, o uno del background al foreground mediante el comando interno fg.
+	-Reactivar un proceso detenido para que siga ejecutándose pero en segundo plano, mediante el comando interno bg.
+
 03/12/2018
 
 Arreglado el cierre inesperado del shell después de realizar Ctrl+C o Ctrl+Z, posterior a haber realizado un Ctrl+D con una linea no vac
