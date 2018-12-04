@@ -1,3 +1,7 @@
+04/12/2018
+
+14:16h: Retomo el proyecto con los problemas de funcionamiento de fg y bg: el waitpid() del reaper capta señal SIGCONT, y lo trata como si el proceso hubiese terminado, eliminándole de jobs_list.
+
 03/12/2018
 
 Arreglado el cierre inesperado del shell después de realizar Ctrl+C o Ctrl+Z, posterior a haber realizado un Ctrl+D con una linea no vac
