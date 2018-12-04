@@ -1,4 +1,5 @@
-#define _POSIX_C_SOURCE 200112L
+//#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200809L
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -160,6 +161,7 @@ int execute_line(char *line) {
 
         //Enviar señal al enterrador de hijos
         signal(SIGCHLD, reaper);
+        signal(SIGTSTP, ctrlz);
         signal(SIGINT, ctrlc);
 
         //Determinar si se trata de proceso en fg o bg
@@ -396,6 +398,12 @@ int internal_cd(char **args) {
  * 
  * En este nivel, muestra por pantalla el nuevo valor mediante la función
  * getenv() para comprobar su funcionamiento.
+ * 
+ * Parámetros:
+ *          +args: Doble puntero al comando introducido separado en tokens.
+ * Devuelve:
+ *          +1: Si se ejecuta correctamente.
+ *          +(-1): En caso contrario.
  */
 int internal_export(char **args){
 
@@ -577,6 +585,7 @@ int internal_bg(char **args) {
     }
 
     if (jobs_list[job_id].status != 'D') return 1;
+
     //Actualizar información del trabajo en jobs_list y obtener su pid
     jobs_list[job_id].status = 'E';
 
@@ -601,7 +610,7 @@ int internal_fg(char **args) {
     int job_id = 0;
     pid_t job_pid = 0;
 
-    /*Si el primer argumento de bg es vacío, entonces ejecutar último proceso
+    /*Si el primer argumento de fg es vacío, entonces ejecutar último proceso
     agregado*/
     if (args[1] == NULL) {
         job_id = n_pids;
@@ -646,21 +655,21 @@ int internal_fg(char **args) {
     }
 
     if (jobs_list[job_id].status != 'D') return 1;
+
     //Actualizar información del trabajo en jobs_list y obtener su pid
     jobs_list[job_id].status = 'E';
-
+    pid_t pid = jobs_list[job_id].pid;
     jobs_list[0] = jobs_list[job_id];
 
     jobs_list_remove(job_id);
 
-    kill(jobs_list[job_id].pid, SIGCONT);
+    kill(pid, SIGCONT);
 
-    pid_t pid = jobs_list[job_id].pid;
     //Esperar a que nuevo trabajo en fg termine
-    while (waitpid(-1, NULL, 0) != pid) {
-        puts("hey");
-        pause();
-    }
+    // while (waitpid(pid, NULL, 0) != pid) {
+    //     puts("hey");
+    //     pause();
+    // }
 
     return 1;
 }
@@ -690,22 +699,26 @@ void reaper(int signum) {
     int wstatus;
 
     //Check errores en wait()
-    while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0) {
+    while ((pid = waitpid(-1, &wstatus, WNOHANG | WCONTINUED)) > 0) {
         if (pid == jobs_list[0].pid) {
-            /*Si el job terminado es el trabajo el foreground, resetear
-            jobs_list[0]*/
-            reset_jobs_list_fg();
-
-        } else {
-            /*Si el job terminado no es el trabajo en foreground, quitar de la
-            lista*/
-            int fnsh_job = jobs_list_find(pid);
-
-            if (fnsh_job == -1) { //check for errors
-                imprime_error("\nError en jobs_list_find.");
+            if (!WIFCONTINUED(wstatus)) {
+                /*Si el job terminado es el trabajo el foreground, resetear
+                jobs_list[0]*/
+                reset_jobs_list_fg();
             }
 
+        } else {
+            if (!WIFCONTINUED(wstatus)) {
+                /*Si el job terminado no es el trabajo en foreground, quitar de 
+                la lista*/
+                int fnsh_job = jobs_list_find(pid);
+
+                if (fnsh_job == -1) { //check for errors
+                    imprime_error("\nError en jobs_list_find.");
+                }
+                puts("WIFCONTINUED");
                 jobs_list_remove(fnsh_job);
+            }
         }
 
         //Indicar razón de finalización de proceso hijo.
