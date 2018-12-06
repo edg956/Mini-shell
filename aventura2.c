@@ -1,5 +1,5 @@
-//#define _POSIX_C_SOURCE 200112L
-#define _POSIX_C_SOURCE 200809L
+#define _POSIX_C_SOURCE 200112L
+//#define _POSIX_C_SOURCE 200809L
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -731,9 +731,17 @@ void reaper(int signum) {
     int wstatus;
 
     //Check errores en wait()
-    while ((pid = waitpid(-1, &wstatus, WNOHANG | WCONTINUED)) > 0) {
-
-        if (!WIFCONTINUED(wstatus)) {
+    while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0) {
+        printf("pid; %d\n",pid);
+        //Indicar razón de finalización de proceso hijo.
+        if (WIFEXITED(wstatus)) {
+            printf("[reaper(): Proceso hijo %d finalizado. Estado=%d]\n", pid, WEXITSTATUS(wstatus));
+        } else if (WIFSIGNALED(wstatus)) {
+            printf("[reaper(): Proceso hijo %d exterminado por señal %d]\n", pid, WTERMSIG(wstatus));
+        } else if (WIFSTOPPED(wstatus)) {
+            printf("[reaper(): Proceso hijo %d detenido por señal %d]\n", pid, WSTOPSIG(wstatus));
+        }
+        /*if (!WIFCONTINUED(wstatus)) {*/
             if (pid == jobs_list[0].pid) {
             
                 /*Si el job terminado es el trabajo el foreground, resetear
@@ -753,17 +761,10 @@ void reaper(int signum) {
                 jobs_list_remove(fnsh_job);
             
             }
-        }
-        //Indicar razón de finalización de proceso hijo.
-        if (WIFEXITED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d finalizado. Estado=%d]\n", pid, WEXITSTATUS(wstatus));
-        } else if (WIFSIGNALED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d exterminado por señal %d]\n", pid, WTERMSIG(wstatus));
-        } else if (WIFSTOPPED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d detenido por señal %d]\n", pid, WSTOPSIG(wstatus));
-        } else if (WIFCONTINUED(wstatus)) {
+       /* }
+         else if (WIFCONTINUED(wstatus)) {
             printf("[reaper(): Proceso hijo %d continuado.]\n", pid);
-        }
+        }*/
     }
 }
 
