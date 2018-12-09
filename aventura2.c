@@ -81,6 +81,7 @@ char *read_line(char *line) {
 
     clearerr(stdin);    //Resetear el indicador de EOF y de errores del STDIN
     fflush(stdin);
+    fflush(stdout);
     return command;
 }
 
