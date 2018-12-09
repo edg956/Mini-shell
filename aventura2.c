@@ -172,6 +172,8 @@ int execute_line(char *line) {
                 }
             }
 
+            int valido = is_output_redirection(args);
+
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
                 imprime_error(NULL);
@@ -1018,10 +1020,16 @@ int jobs_list_remove(int pos) {
 int is_output_redirection(char **args) {
     //Declaraciones
     int i = 0;
+<<<<<<< HEAD
+=======
+    int file; 
+    char str[20];
+>>>>>>> 14e06f769820c88f5d38dc397e22eee3ccb0d2f9
 
     //En caso de que llegue String vacío (Ej. CtrlZ || CtrlC con comando vacio)
     if (args[i] == NULL) return 0;
 
+<<<<<<< HEAD
     while (args[i] != NULL && strcmp(args[i],">")) {
         i++;
     }
@@ -1030,6 +1038,26 @@ int is_output_redirection(char **args) {
     if (args[i] == NULL) return 0;
     
     return 1;
+=======
+    while (strcmp(args[i],">")) {   
+        i++;
+    }
+
+    args[i] = NULL;
+    i++;
+    
+    if (args[i] != NULL) { 
+        file = open (args[i],  O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+        dup2(file, 1);
+        close(file); 
+        puts("hey");
+        return 1; 
+        
+    } else {
+        puts("hey");
+        return 0;
+    }    
+>>>>>>> 14e06f769820c88f5d38dc397e22eee3ccb0d2f9
 }
 
 /******************************************************************************
