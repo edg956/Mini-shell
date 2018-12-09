@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 /******************************************************************************
                             VARIABLES GLOBALES
@@ -156,7 +157,24 @@ int execute_line(char *line) {
                 printf("[execute_line(): PID proceso hijo: %d (%s)]\n", getpid(), args[0]);
             }
 
-            int valido = is_output_redirection(args);
+            if (is_output_redirection(args)) {
+                int file;
+                int i = 0;
+
+                while (strcmp(args[i], ">")) i++;
+
+                args[i] = NULL;
+                i++;
+                
+                if (args[i] != NULL) { 
+                    file = open(args[i], O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+                    dup2(file, 1);
+                    close(file);
+                } else {
+                    imprime_error("\nRuta de fichero no especificada.");
+                    return 1;
+                }
+            }
 
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
@@ -1026,30 +1044,18 @@ int jobs_list_remove(int pos) {
 int is_output_redirection(char **args) {
     //Declaraciones
     int i = 0;
-    int file; 
-    char str[20];
 
     //En caso de que llegue String vacío (Ej. CtrlZ || CtrlC con comando vacio)
     if (args[i] == NULL) return 0;
 
-    while (strcmp(args[i],">")) {   
+    while (args[i] != NULL && strcmp(args[i],">")) {
         i++;
     }
 
-    args[i] = NULL;
-    i++;
+    //Si no hay '>', retornar 0;
+    if (args[i] == NULL) return 0;
     
-    if (args[i] != NULL) { 
-        file = open (args[i],  O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
-        dup2(file, 1);
-        close(file); 
-        puts("hey");
-        return 1; 
-        
-    } else {
-        puts("hey");
-        return 0;
-    }    
+    return 1;
 }
 
 /******************************************************************************
