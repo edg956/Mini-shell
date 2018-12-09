@@ -188,10 +188,7 @@ int execute_line(char *line) {
 
             //Esperar a que proceso en fg termine su ejecución.
             while (jobs_list[0].pid != 0) {
-                if (pause() == -1) { //Check for errors
-                    imprime_error(NULL);
-                    return 0;
-                }
+                pause();
             }   
         }
     }
