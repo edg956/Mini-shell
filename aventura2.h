@@ -57,6 +57,7 @@ int is_background (char **args);
 int jobs_list_add(pid_t pid, char status, char *command_line);
 int jobs_list_find(pid_t pid);
 int jobs_list_remove(int pos);
+int is_output_redirection(char **args);
 
 /**
  * FUNCIONES AUXILIARES
