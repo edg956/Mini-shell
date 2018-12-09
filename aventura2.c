@@ -1,4 +1,6 @@
 //#define _POSIX_C_SOURCE 200112L
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -6,11 +8,10 @@
 #include <ctype.h>
 #include <errno.h>
 #include <sys/wait.h>
-#include "aventura2.h"
-#include <sys/types.h>
 #include <signal.h>
 #include <fcntl.h>
-#include <sys/stat.h>
+#include "aventura2.h"
+
 
 /******************************************************************************
                             VARIABLES GLOBALES
@@ -151,11 +152,6 @@ int execute_line(char *line) {
             signal(SIGINT, SIG_IGN);
             signal(SIGTSTP, SIG_IGN);
             signal(SIGCHLD, SIG_DFL);
-
-            if (!is_bg) {
-                printf("[execute_line(): PID proceso padre: %d (%s)]\n", getppid(), program_name);
-                printf("[execute_line(): PID proceso hijo: %d (%s)]\n", getpid(), args[0]);
-            }
 
             if (is_output_redirection(args)) {
                 int file;
@@ -325,8 +321,6 @@ int internal_cd(char **args) {
     char *path;
     if (!(path = malloc(COMMAND_LINE_SIZE))) return -1;
 
-    printf("Current path: %s\n",getcwd(NULL,COMMAND_LINE_SIZE));
-
     /*Chequea casos posibles de entrada para comando cd:
         Casos:  "cd" sin argumentos.
                 "cd ruta/a/'carpeta con espacios'" (más de un arg)
@@ -345,8 +339,6 @@ int internal_cd(char **args) {
             perror("Error");
             return -1;
         }
-
-        printf("New path: %s\n",getcwd(NULL,COMMAND_LINE_SIZE));
         return 1;
 
     }
@@ -370,7 +362,7 @@ int internal_cd(char **args) {
 
         //Análisis de validez de argumento. Ver check_formato()
         if (check_formato(path) == -1) {
-            puts("cd: demasiados argumentos.");
+            imprime_error("cd: demasiados argumentos.");
             return 1;
         }
 
@@ -400,7 +392,7 @@ int internal_cd(char **args) {
     if (chdir(path) != 0) { //Check for errors
         
         if (errno == ENOENT) {
-            puts("cd: Archivo o fichero inexistente.");
+            imprime_error("cd: Archivo o fichero inexistente.");
         } else {
             perror("cd: error");
         }
@@ -416,7 +408,6 @@ int internal_cd(char **args) {
         }
 
     }
-    printf("New path: %s\n",getcwd(NULL,COMMAND_LINE_SIZE));
     return 1;
     
 }
@@ -496,17 +487,12 @@ int internal_export(char **args){
     char *nombre = strtok(argument, &delim[0]);
     char *valor = strtok(NULL,&delim[0]);
 
-    printf("Nombre: %s\n", nombre);
-    printf("Valor: %s\n", valor);
-
     if (valor == NULL) {
         imprime_error("Sintaxis incorrecta. La sintaxis esperada es: NOMBRE_VAR=VALOR_NUEVO");
         return 1;
     }
 
-    printf("Valor inicial de la variable %s: %s\n", nombre, getenv(nombre));
     setenv(nombre, valor, 1);
-    printf("Valor final de la variable %s: %s\n", nombre, getenv(nombre));
     return 1;
     
 }
@@ -597,7 +583,7 @@ int internal_bg(char **args) {
     /*Check excedencia de argumentos*/
     } else if (args[2] != NULL) { 
 
-        puts("bg: Demasiados argumentos.");
+        imprime_error("bg: Demasiados argumentos.");
         return 1;
 
     } else {
@@ -609,7 +595,7 @@ int internal_bg(char **args) {
 
         //Check si el argumento contiene solo números (incluso precedido de %)
         if (!solo_numeros(arg)) {
-            puts("bg: Número de trabajo inválido.");
+            imprime_error("bg: Número de trabajo inválido.");
             return 1;
         }
 
@@ -618,7 +604,7 @@ int internal_bg(char **args) {
 
         //Check si el job_id existe en el jobs_list
         if (!(job_id > 0 && job_id <= n_pids)) {
-            puts("bg: Número de trabajo no existe.");
+            imprime_error("bg: Número de trabajo no existe.");
             return 1;
         }
 
@@ -679,7 +665,7 @@ int internal_fg(char **args) {
 
     } else if (args[2] != NULL) { //Check excedencia de argumentos
 
-        puts("fg: Demasiados argumentos.");
+        imprime_error("fg: Demasiados argumentos.");
         return 1;
 
     } else {
@@ -691,7 +677,7 @@ int internal_fg(char **args) {
 
         //Check si el argumento contiene solo números (incluso precedido de %)
         if (!solo_numeros(arg)) {
-            puts("fg: Número de trabajo inválido.");
+            imprime_error("fg: Número de trabajo inválido.");
             return 1;
         }
 
@@ -700,7 +686,7 @@ int internal_fg(char **args) {
 
         //Check si el job_id existe en el jobs_list
         if (!(job_id > 0 && job_id <= n_pids)) {
-            puts("fg: Número de trabajo no existe.");
+            imprime_error("fg: Número de trabajo no existe.");
             return 1;
         }
 
@@ -766,17 +752,6 @@ void reaper(int signum) {
 
     //Check errores en wait()
     while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0) {
-        //Indicar razón de finalización de proceso hijo.
-        if (WIFEXITED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d finalizado. Estado=%d]\n", 
-            pid, WEXITSTATUS(wstatus));
-        } else if (WIFSIGNALED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d exterminado por señal %d]\n", 
-            pid, WTERMSIG(wstatus));
-        } else if (WIFSTOPPED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d detenido por señal %d]\n", 
-            pid, WSTOPSIG(wstatus));
-        }
         if (pid == jobs_list[0].pid) {
             
             /*Si el job terminado es el trabajo el foreground, resetear
@@ -847,7 +822,6 @@ void ctrlc(int signum) {
         if (strcmp(line, pnamecpy) != 0) {
       
             kill(jobs_list[0].pid, SIGTERM);
-            puts("\nMatamos el proceso en foreground.");
 
         } else {
             error = "Señal SIGTERM no enviada debido a que el proceso en foreground es el shell.";
@@ -909,7 +883,7 @@ void ctrlz(int signum) {
         if (strcmp(line, pnamecpy) != 0) {
 
             kill(jobs_list[0].pid, SIGSTOP);
-            puts("\nParamos el proceso en foreground.");
+
             jobs_list[0].status = 'D';
 
             jobs_list_add(jobs_list[0].pid, jobs_list[0].status, jobs_list[0].command_line);
