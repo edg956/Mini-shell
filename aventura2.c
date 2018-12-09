@@ -1,5 +1,4 @@
-#define _POSIX_C_SOURCE 200112L
-
+//#define _POSIX_C_SOURCE 200112L
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -10,6 +9,7 @@
 #include "aventura2.h"
 #include <sys/types.h>
 #include <signal.h>
+#include <fcntl.h>
 
 /******************************************************************************
                             VARIABLES GLOBALES
@@ -155,6 +155,8 @@ int execute_line(char *line) {
                 printf("[execute_line(): PID proceso padre: %d (%s)]\n", getppid(), program_name);
                 printf("[execute_line(): PID proceso hijo: %d (%s)]\n", getpid(), args[0]);
             }
+
+            int valido = is_output_redirection(args);
 
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
@@ -1007,6 +1009,47 @@ int jobs_list_remove(int pos) {
     }
     n_pids--;
     return 0;
+}
+
+/**
+ * Función booleana que recorre la lista de argumentos buscando un token ">", 
+ * seguido de otro token que será un nombre de fichero.
+ * 
+ * Parámetros
+ *              + char **args: Lista de argumentos. 
+ * 
+ * Return
+ *              + Devuelve 0 si no hay redireccionamiento. 
+ *              + Devuelve 1 si hay redireccionamiento ">". 
+ */
+
+int is_output_redirection(char **args) {
+    //Declaraciones
+    int i = 0;
+    int file; 
+    char str[20];
+
+    //En caso de que llegue String vacío (Ej. CtrlZ || CtrlC con comando vacio)
+    if (args[i] == NULL) return 0;
+
+    while (strcmp(args[i],">")) {   
+        i++;
+    }
+
+    args[i] = NULL;
+    i++;
+    
+    if (args[i] != NULL) { 
+        file = open (args[i],  O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+        dup2(file, 1);
+        close(file); 
+        puts("hey");
+        return 1; 
+        
+    } else {
+        puts("hey");
+        return 0;
+    }    
 }
 
 /******************************************************************************
