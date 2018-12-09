@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200112L
-//#define _POSIX_C_SOURCE 200809L
+
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -38,12 +38,13 @@ void main(int argc, char *argv[]) {
     //Inicializar estructura jobs_list[0]
     reset_jobs_list_fg();
 
-    print_prompt();
-
-    while (1) {
-        execute_line(read_line(line));
+    int error = 1;
+    while (error) {
         print_prompt();
+        error = execute_line(read_line(line));
     }
+    char *ermsg = "\nHa ocurrido un error durante la ejecución del programa.\nCerrando.";
+    imprime_error(ermsg);
 
 }
 
@@ -111,15 +112,17 @@ int execute_line(char *line) {
         puts(""); //Salto de linea al volver a Bash.
         exit(1);
     }
-
+    
     //Declaraciones
-    char **args = malloc(ARGS_SIZE);
-    char *linecpy = malloc(COMMAND_LINE_SIZE);
     int is_bg = 0;
+    char **args;
+    char *linecpy;
+    char *delim = "\n";
+    if (!(args = malloc(ARGS_SIZE))) return 0; //Control de errores
+    if (!(linecpy = malloc(COMMAND_LINE_SIZE))) return 0; //Control de errores
     
     //Copia para procesos hijos en ejecución
     linecpy = strcpy(linecpy,line);
-    char *delim = "\n";
     linecpy = strtok(linecpy,delim);    //Eliminar '\n' de la linea
     
     //Trocear line en argumentos.
@@ -129,6 +132,7 @@ int execute_line(char *line) {
     is_bg = is_background(args);    
 
     //Check si el comando ha sido un comando interno o externo
+    int chk_int;
     if (check_internal(args) == 0) {
 
         /*Ejecución de comando externo*/
@@ -137,7 +141,7 @@ int execute_line(char *line) {
         pid_t cpid = fork();
         if (cpid == -1) {   //Check errores en fork()
             imprime_error(NULL);
-            return -1;
+            return 0;
         }
 
         //Código para proceso hijo
@@ -154,7 +158,7 @@ int execute_line(char *line) {
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
                 imprime_error(NULL);
-                exit(1);
+                return 0;
             }
         }
         
@@ -172,6 +176,7 @@ int execute_line(char *line) {
             if (jobs_list_add(cpid, 'E', linecpy) == -1) {
                 kill(cpid, 9); //En caso de error añadiendo trabajo en jobs_list
                 imprime_error("\nError añadiendo trabajo en background. Abortando.");
+                return 0;
             }
 
         } else {
@@ -182,13 +187,17 @@ int execute_line(char *line) {
 
             //Esperar a que proceso en fg termine su ejecución.
             while (jobs_list[0].pid != 0) {
-                pause();
+                if (pause() == -1) { //Check for errors
+                    imprime_error(NULL);
+                    return 0;
+                }
             }   
         }
     }
 
     //Libera variables locales auxiliares
     free(linecpy);
+    return 1;
 }
 
 /**
@@ -295,7 +304,8 @@ int check_internal(char **args) {
  *                 entorno.
  */
 int internal_cd(char **args) {
-    char *path = malloc(COMMAND_LINE_SIZE);
+    char *path;
+    if (!(path = malloc(COMMAND_LINE_SIZE))) return -1;
 
     printf("Current path: %s\n",getcwd(NULL,COMMAND_LINE_SIZE));
 
@@ -328,7 +338,8 @@ int internal_cd(char **args) {
         
         //Regeneración del argumento entero para verificar validez de formato
         int k = 1;
-        char *auxpath = malloc(COMMAND_LINE_SIZE);
+        char *auxpath;
+        if (!(auxpath = malloc(COMMAND_LINE_SIZE))) return -1; //Check for errors
         
         while (args[k] != NULL) {
             auxpath = strcat(auxpath, args[k]);
@@ -351,7 +362,7 @@ int internal_cd(char **args) {
         */
       
         free (auxpath);
-        auxpath = malloc(COMMAND_LINE_SIZE);
+        if (!(auxpath = malloc(COMMAND_LINE_SIZE))) return -1;
         char *delim = "'\\\"";
         char *aux = strtok(path, delim);
 
@@ -383,6 +394,7 @@ int internal_cd(char **args) {
         path = getcwd(path, COMMAND_LINE_SIZE);
         if (setenv("PWD", path, 1) != 0) {
             perror("Error en setenv()");
+            return -1;
         }
 
     }
@@ -418,7 +430,8 @@ int internal_export(char **args){
         return -1;
     }
 
-    char *argument = malloc(COMMAND_LINE_SIZE);
+    char *argument;
+    if (!(argument = malloc(COMMAND_LINE_SIZE))) return -1; //Check for errors
 
     /*
         Check si VALUE es argumento compuesto del tipo:
@@ -428,7 +441,9 @@ int internal_export(char **args){
     */
     if (args[2] != NULL) {
         //Reconstrucción de argumentos para comprobar validez
-        char *auxarg = malloc(COMMAND_LINE_SIZE);
+        char *auxarg;
+        if (!(auxarg = malloc(COMMAND_LINE_SIZE))) return -1; //Check for errors
+
         for (int i = 1; args[i] != NULL; i++) {
             auxarg = strcat(auxarg, args[i]);
             auxarg = strcat(auxarg, " ");
@@ -442,7 +457,7 @@ int internal_export(char **args){
         }
 
         free(auxarg);
-        auxarg = malloc(COMMAND_LINE_SIZE);
+        if (!(auxarg = malloc(COMMAND_LINE_SIZE))) return -1; //Check for errors
         char *delim ="'\\\"";
         char *aux = strtok(argument,delim);
 
@@ -495,6 +510,7 @@ int internal_source(char **args) {
     f = fopen (args[1], "r");
     if (f == NULL){ //Check for errors
         imprime_error(NULL);
+        return -1;
     }
     else {
         //Lectura y ejecución linea a linea hasta llegar a fin de fichero.
@@ -524,7 +540,7 @@ int internal_jobs(char **args) {
     /*Recorre la lista de trabajos en segundo plano*/
     for (int i = 1; i <= n_pids; i++) {
         //Imprimir info de cada job
-        printf("[internal_jobs(): [%d] PID: %d | S: %c | Command: %s]\n",i
+        printf("[%d] %d    %c    %s\n",i
         , jobs_list[i].pid,jobs_list[i].status, jobs_list[i].command_line);
     }
     return 1;
@@ -594,7 +610,7 @@ int internal_bg(char **args) {
     }
     /*FIN DE CONDICIONES*/
 
-    if (jobs_list[job_id].status != 'D') {
+    if (jobs_list[job_id].status == 'E') {
         imprime_error("Trabajo ya se está ejecutando en segundo plano.");
         return 1;
     }
@@ -613,7 +629,8 @@ int internal_bg(char **args) {
         command = strcpy(command, jobs_list[job_id].command_line);
     }
 
-    printf("[internal_bg(): [%d]+ %s]\n", job_id, command);
+    printf("[%d] %d    %c    %s]\n", job_id, jobs_list[job_id].pid,
+    jobs_list[job_id].status, command);
 
     return 1;
 }
@@ -683,7 +700,6 @@ int internal_fg(char **args) {
     jobs_list_remove(job_id);
 
     kill(pid, SIGCONT);
-    signal(SIGCHLD, reaper);
 
     /*Modificación de la linea para quitar el & en lineas ejecutadas en bg*/    
     char *aux = strtok(jobs_list[0].command_line, " &");
@@ -691,12 +707,12 @@ int internal_fg(char **args) {
     command = strcat(command, " ");
     aux = strtok(NULL, " &");
     command = strcat(command, aux);
+
     strcpy(jobs_list[0].command_line, command);
 
-    printf("[internal_fg(): %s]\n", jobs_list[0].command_line);
+    printf("%s\n", jobs_list[0].command_line);
 
     free(command);
-    free(aux);
 
     //Esperar a que nuevo trabajo en fg termine
     while (jobs_list[0].pid != 0) {
@@ -732,39 +748,38 @@ void reaper(int signum) {
 
     //Check errores en wait()
     while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0) {
-        printf("pid; %d\n",pid);
         //Indicar razón de finalización de proceso hijo.
         if (WIFEXITED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d finalizado. Estado=%d]\n", pid, WEXITSTATUS(wstatus));
+            printf("[reaper(): Proceso hijo %d finalizado. Estado=%d]\n", 
+            pid, WEXITSTATUS(wstatus));
         } else if (WIFSIGNALED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d exterminado por señal %d]\n", pid, WTERMSIG(wstatus));
+            printf("[reaper(): Proceso hijo %d exterminado por señal %d]\n", 
+            pid, WTERMSIG(wstatus));
         } else if (WIFSTOPPED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d detenido por señal %d]\n", pid, WSTOPSIG(wstatus));
+            printf("[reaper(): Proceso hijo %d detenido por señal %d]\n", 
+            pid, WSTOPSIG(wstatus));
         }
-        /*if (!WIFCONTINUED(wstatus)) {*/
-            if (pid == jobs_list[0].pid) {
+        if (pid == jobs_list[0].pid) {
             
-                /*Si el job terminado es el trabajo el foreground, resetear
-                jobs_list[0]*/
-                reset_jobs_list_fg();
+            /*Si el job terminado es el trabajo el foreground, resetear
+            jobs_list[0]*/
+            reset_jobs_list_fg();
             
+        } else {
+            /*Si el job terminado no es el trabajo en foreground, quitar de 
+            la lista*/
+            int fnsh_job = jobs_list_find(pid);
 
-            } else {
-                /*Si el job terminado no es el trabajo en foreground, quitar de 
-                la lista*/
-                int fnsh_job = jobs_list_find(pid);
-
-                //check for errors
-                if (fnsh_job == -1) { 
-                    imprime_error("\nError en jobs_list_find.");
-                }
-                jobs_list_remove(fnsh_job);
-            
+            //check for errors
+            if (fnsh_job == -1) { 
+                imprime_error("\nError en jobs_list_find.");
             }
-       /* }
-         else if (WIFCONTINUED(wstatus)) {
-            printf("[reaper(): Proceso hijo %d continuado.]\n", pid);
-        }*/
+            printf("[%d]+ Hecho      %s\n", fnsh_job, 
+            jobs_list[fnsh_job].command_line);
+
+            jobs_list_remove(fnsh_job);
+            
+        }
     }
 }
 
@@ -791,8 +806,11 @@ void ctrlc(int signum) {
 
     //Declaraciones
     char *error = NULL; 
-    char *line = malloc(COMMAND_LINE_SIZE);
-    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
+    char *line;
+    char *pnamecpy;
+    //Check for errors
+    if (!(line = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
+    if (!(pnamecpy = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
 
     //Ver que haya algún proceso en foreground
     if (jobs_list[0].pid > 0) {
@@ -814,48 +832,13 @@ void ctrlc(int signum) {
             puts("\nMatamos el proceso en foreground.");
 
         } else {
-            /*
-            DISCUTIR NECESIDAD DE ESTA PARTE DE CODIGO:
-
-            El único caso en que se puede dar esto es que desde el mini shell,
-            se haya ejecutado el archivo compilado de la aventura2 ej:
-            eugenio@mini_shell:ruta$ ./mini_shell.
-
-            En este caso, tanto la linea del último comando, como el nombre del
-            programa coinciden.
-
-            SIGING llega a ambos shells, haciendo que ctrlc se ejecute dos veces:
-            1 por cada shell en ejecución. En cada shell ocurre lo siguiente:
-
-            [Contexto: desde el terminal se ejecuta ./mini_shell.
-                       desde el mini shell se ejecuta ./mini_shell y
-                       desde el mini_shell hijo se presiona ctrl+c]
-
-            Shell hijo: Al no tener ningún proceso en foreground (ejecutamos
-                        ctrl+c directamente) se imprime un mensaje de error
-                        notificando que la señal SIGTERM no se ha enviado 
-                        porque no hay proceso en foreground
-
-            Shell padre: Al tener un proceso en foreground (./mini_shell) y
-                         coincidir el argumento 0 del proceso hijo con el
-                         nombre de programa (variable program_name) del shell
-                         padre, se imprime por pantalla el error correspondien-
-                         te a que el proceso en foreground es el shell.
-            
-            Problema: Se imprimen dos mensajes de error cuando uno -el del 
-                      hijo- basta.
-
-            
-        */
             error = "Señal SIGTERM no enviada debido a que el proceso en foreground es el shell.";
             imprime_error(error);
         }
 
     } else {
-        
         error = "\nSeñal SIGTERM no enviada debido a que no hay proceso en foreground.";
         imprime_error(error);
-
     }
 
     //Libera variables locales auxiliares
@@ -885,8 +868,11 @@ void ctrlz(int signum) {
 
     //Declaraciones
     char *error = NULL;
-    char *line = malloc(COMMAND_LINE_SIZE);
-    char *pnamecpy = malloc(COMMAND_LINE_SIZE);
+    char *line;
+    char *pnamecpy;
+    //Check for errors
+    if (!(line = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
+    if (!(pnamecpy = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
 
     //Ver que haya algún proceso en foreground
     if (jobs_list[0].pid > 0)   {        
@@ -917,7 +903,6 @@ void ctrlz(int signum) {
         }
     }
     else   {
-
         imprime_error("\nSeñal SIGTSTP no enviada debido a que no hay proceso en foreground");
     }
 
@@ -979,7 +964,8 @@ int jobs_list_add(pid_t pid, char status, char *command_line){
         jobs_list[n_pids].pid = pid;
         jobs_list[n_pids].status = status;
         strcpy(jobs_list[n_pids].command_line, command_line);
-        printf("[jobs_list_add: [%d]+:  (%s)]\n",n_pids, jobs_list[n_pids].command_line);
+        printf("[%d]+ %d    %c    (%s)\n",n_pids, jobs_list[n_pids].pid, 
+        jobs_list[n_pids].status, jobs_list[n_pids].command_line);
         return 0;
     }else{
         return -1;
