@@ -159,7 +159,7 @@ int execute_line(char *line) {
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
                 imprime_error(NULL);
-                return 0;
+                exit(1);
             }
         }
         
