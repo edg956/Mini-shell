@@ -172,8 +172,6 @@ int execute_line(char *line) {
                 }
             }
 
-            int valido = is_output_redirection(args);
-
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
                 imprime_error(NULL);
