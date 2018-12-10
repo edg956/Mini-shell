@@ -1,23 +1,8 @@
-/******************************************************************************
- Nombre del proyecto: my_shell
- Grupo: Los tres mosqueteros
- Participantes/desarrolladores: 
-                                + Eugenio Doñaque
-                                + Álvaro Pons 
-                                + Nadal Llabrés
-Asignatura: 21708-Sistemas operativos (prácticas)
-Professor/a: Adelaida Delgado
-*******************************************************************************/
-
-//Defines
 #define _POSIX_C_SOURCE 200112L
-#define _POSIX_C_SOURCE 200112L
-
-//Condicionales del preprocesador
 #ifdef USE_READLINE
 #endif 
+#define USE_READLINE
 
-//Includes
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <string.h>
@@ -33,19 +18,19 @@ Professor/a: Adelaida Delgado
 #include <readline/readline.h>
 #include <readline/history.h>
 
+
+
 /******************************************************************************
                             VARIABLES GLOBALES
 ******************************************************************************/
 char *program_name = NULL;
 int n_pids;
-
-/*Array que guarda los diferentes estados que toman los procesos durante
-su ejecución en primer y segundo plano.*/
+/*
+    Array que guarda los diferentes estados que toman los procesos durante
+    su ejecución en primer y segundo plano.
+*/
 static struct info_process jobs_list[ARGS_SIZE];
 
-/******************************************************************************
-                                 MÉTODO MAIN
-******************************************************************************/
 int main(int argc, char *argv[]) {
 
     program_name = malloc(COMMAND_LINE_SIZE);
