@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200112L
 #ifdef USE_READLINE
 #endif 
-#define USE_READLINE
+//#define USE_READLINE
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -14,7 +14,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
-#include "aventura2.h"
+#include "nivel7.h"
 #include <readline/readline.h>
 #include <readline/history.h>
 

@@ -2,10 +2,10 @@ CC=gcc
 CFLAGS=-c -g -Wall -std=c99
 LDFLAGS=-lreadline
 
-SOURCES= aventura2.c
+SOURCES= nivel7.c
 LIBRARIES= #.o
-INCLUDES= aventura2.h
-PROGRAMS=aventura2
+INCLUDES= nivel7.h
+PROGRAMS=nivel7
 OBJS=$(SOURCES:.c=.o)
 
 all: $(OBJS) $(PROGRAMS)
@@ -13,7 +13,7 @@ all: $(OBJS) $(PROGRAMS)
 #$(PROGRAMS): $(LIBRARIES) $(INCLUDES)
 #   $(CC) $(LDFLAGS) $(LIBRARIES) $@.o -o $@
 
-aventura2: aventura2.o
+nivel7: nivel7.o
 	$(CC) $@.o -o $@ $(LDFLAGS) $(LIBRARIES)
 
 %.o: %.c $(INCLUDES)
