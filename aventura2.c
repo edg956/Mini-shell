@@ -880,6 +880,13 @@ void ctrlc(int signum) {
     } else {
         error = "\nSeñal SIGTERM no enviada debido a que no hay proceso en foreground.";
         imprime_error(error);
+
+        #ifdef USE_READLINE
+            char *prompt;
+            if (!(prompt = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
+            printf("\n%s",print_prompt(prompt));
+            free(prompt);
+        #endif
     }
 
     //Libera variables locales auxiliares
@@ -943,6 +950,13 @@ void ctrlz(int signum) {
     }
     else   {
         imprime_error("\nSeñal SIGTSTP no enviada debido a que no hay proceso en foreground");
+        
+        #ifdef USE_READLINE
+            char *prompt;
+            if (!(prompt = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
+            printf("\n%s",print_prompt(prompt));
+            free(prompt);
+        #endif
     }
 
     //Libera variables locales auxiliares
