@@ -1,23 +1,8 @@
-/******************************************************************************
- Nombre del proyecto: my_shell
- Grupo: Los tres mosqueteros
- Participantes/desarrolladores: 
-                                + Eugenio Doñaque
-                                + Álvaro Pons 
-                                + Nadal Llabrés
-Asignatura: 21708-Sistemas operativos (prácticas)
-Professor/a: Adelaida Delgado
-*******************************************************************************/
-
-//Defines
 #define _POSIX_C_SOURCE 200112L
-#define USE_READLINE
-
-//Condicionales del preprocesador
 #ifdef USE_READLINE
 #endif 
+//#define USE_READLINE
 
-//Includes
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <string.h>
@@ -29,23 +14,23 @@ Professor/a: Adelaida Delgado
 #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
-#include "my_shell.h"
+#include "nivel7.h"
 #include <readline/readline.h>
 #include <readline/history.h>
+
+
 
 /******************************************************************************
                             VARIABLES GLOBALES
 ******************************************************************************/
 char *program_name = NULL;
 int n_pids;
-
-/*Array que guarda los diferentes estados que toman los procesos durante
-su ejecución en primer y segundo plano.*/
+/*
+    Array que guarda los diferentes estados que toman los procesos durante
+    su ejecución en primer y segundo plano.
+*/
 static struct info_process jobs_list[ARGS_SIZE];
 
-/******************************************************************************
-                                 MÉTODO MAIN
-******************************************************************************/
 int main(int argc, char *argv[]) {
 
     program_name = malloc(COMMAND_LINE_SIZE);
@@ -96,7 +81,8 @@ char *read_line(char *line) {
 
     //Declaraciones
     char *command;
-    char *prompt = malloc(PROMPT_SIZE);
+    char *prompt;
+    if (!(prompt = malloc(COMMAND_LINE_SIZE))) return NULL; //Check for errors
 
 //Uso de la librería readline (edición de comandos disponible e historial).
 #ifdef USE_READLINE
@@ -223,6 +209,13 @@ int execute_line(char *line) {
 
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
+                if (errno == ENOENT) {
+                    char *error;
+                    if (!(error = malloc(COMMAND_LINE_SIZE))) return 0; //Check for errors
+                    sprintf(error, "Bash: %s: comando no encontrado.", linecpy);
+                    imprime_error(error);
+                    exit(1);
+                }
                 imprime_error(NULL);
                 exit(1);
             }
@@ -564,12 +557,18 @@ int internal_source(char **args) {
     }
     else {
         //Lectura y ejecución linea a linea hasta llegar a fin de fichero.
-        char linea[COMMAND_LINE_SIZE];
-        while (fgets(linea, COMMAND_LINE_SIZE, f) != NULL){
+        char *linea;
+        if (!(linea = malloc(COMMAND_LINE_SIZE))) return -1;
+
+        linea = fgets(linea, COMMAND_LINE_SIZE, f);
+
+        while (linea != NULL){
             execute_line(linea);
+            linea = fgets(linea, COMMAND_LINE_SIZE, f);
             fflush(f);
         }
         fclose(f);
+        free(linea);
     }
     return 1;
 }
@@ -610,7 +609,7 @@ int internal_jobs(char **args) {
 int internal_bg(char **args) {
     //Declaraciones
     int job_id = 0;
-    char *command = NULL;
+    char *command;
 
     /*CONDICIONES DE VERIFICACIÓN DE SINTAXIS PARA COMANDO BG*/
     if (args[1] == NULL) {
@@ -670,6 +669,7 @@ int internal_bg(char **args) {
 
     kill(jobs_list[job_id].pid, SIGCONT);
 
+    if (!(command = malloc(COMMAND_LINE_SIZE))) return -1;
     //Imprimir linea de comando con & si no lo tiene ya.
     if (!strchr(jobs_list[job_id].command_line, '&')) {
         command = strcpy(command, jobs_list[job_id].command_line);
@@ -678,9 +678,10 @@ int internal_bg(char **args) {
         command = strcpy(command, jobs_list[job_id].command_line);
     }
 
-    printf("[%d] %d    %c    %s]\n", job_id, jobs_list[job_id].pid,
+    printf("[%d] %d    %c    %s\n", job_id, jobs_list[job_id].pid,
     jobs_list[job_id].status, command);
 
+    free(command);
     return 1;
 }
 
@@ -698,7 +699,8 @@ int internal_bg(char **args) {
 int internal_fg(char **args) {
     //Declaraciones
     int job_id = 0;
-    char *command = NULL;
+    char *command;
+    char *aux;
 
     /*CONDICIONES DE VERIFICACION DE SINTAXIS COMANDO FG*/
     if (args[1] == NULL) {
@@ -750,8 +752,11 @@ int internal_fg(char **args) {
 
     kill(pid, SIGCONT);
 
-    /*Modificación de la linea para quitar el & en lineas ejecutadas en bg*/    
-    char *aux = strtok(jobs_list[0].command_line, " &");
+    /*Modificación de la linea para quitar el & en lineas ejecutadas en bg*/
+
+    if (!(command = malloc(COMMAND_LINE_SIZE))) return -1;
+
+    aux = strtok(jobs_list[0].command_line, " &");
     command = strcpy(command, aux);
     command = strcat(command, " ");
     aux = strtok(NULL, " &");
@@ -875,6 +880,13 @@ void ctrlc(int signum) {
     } else {
         error = "\nSeñal SIGTERM no enviada debido a que no hay proceso en foreground.";
         imprime_error(error);
+
+        #ifdef USE_READLINE
+            char *prompt;
+            if (!(prompt = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
+            printf("\n%s",print_prompt(prompt));
+            free(prompt);
+        #endif
     }
 
     //Libera variables locales auxiliares
@@ -938,6 +950,13 @@ void ctrlz(int signum) {
     }
     else   {
         imprime_error("\nSeñal SIGTSTP no enviada debido a que no hay proceso en foreground");
+        
+        #ifdef USE_READLINE
+            char *prompt;
+            if (!(prompt = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
+            printf("\n%s",print_prompt(prompt));
+            free(prompt);
+        #endif
     }
 
     //Libera variables locales auxiliares
