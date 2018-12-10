@@ -81,7 +81,8 @@ char *read_line(char *line) {
 
     //Declaraciones
     char *command;
-    char *prompt = malloc(PROMPT_SIZE);
+    char *prompt;
+    if (!(prompt = malloc(COMMAND_LINE_SIZE))) return NULL; //Check for errors
 
 //Uso de la librería readline (edición de comandos disponible e historial).
 #ifdef USE_READLINE
@@ -208,6 +209,13 @@ int execute_line(char *line) {
 
             //Check errores en execvp(). Enviar error por stderr y realizar
             if (execvp(args[0],args) == -1) {
+                if (errno == ENOENT) {
+                    char *error;
+                    if (!(error = malloc(COMMAND_LINE_SIZE))) return 0; //Check for errors
+                    sprintf(error, "Bash: %s: comando no encontrado.", linecpy);
+                    imprime_error(error);
+                    exit(1);
+                }
                 imprime_error(NULL);
                 exit(1);
             }
