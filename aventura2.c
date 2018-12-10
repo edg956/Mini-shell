@@ -557,12 +557,18 @@ int internal_source(char **args) {
     }
     else {
         //Lectura y ejecución linea a linea hasta llegar a fin de fichero.
-        char linea[COMMAND_LINE_SIZE];
-        while (fgets(linea, COMMAND_LINE_SIZE, f) != NULL){
+        char *linea;
+        if (!(linea = malloc(COMMAND_LINE_SIZE))) return -1;
+
+        linea = fgets(linea, COMMAND_LINE_SIZE, f);
+
+        while (linea != NULL){
             execute_line(linea);
+            linea = fgets(linea, COMMAND_LINE_SIZE, f);
             fflush(f);
         }
         fclose(f);
+        free(linea);
     }
     return 1;
 }
@@ -603,7 +609,7 @@ int internal_jobs(char **args) {
 int internal_bg(char **args) {
     //Declaraciones
     int job_id = 0;
-    char *command = NULL;
+    char *command;
 
     /*CONDICIONES DE VERIFICACIÓN DE SINTAXIS PARA COMANDO BG*/
     if (args[1] == NULL) {
@@ -663,6 +669,7 @@ int internal_bg(char **args) {
 
     kill(jobs_list[job_id].pid, SIGCONT);
 
+    if (!(command = malloc(COMMAND_LINE_SIZE))) return -1;
     //Imprimir linea de comando con & si no lo tiene ya.
     if (!strchr(jobs_list[job_id].command_line, '&')) {
         command = strcpy(command, jobs_list[job_id].command_line);
@@ -671,9 +678,10 @@ int internal_bg(char **args) {
         command = strcpy(command, jobs_list[job_id].command_line);
     }
 
-    printf("[%d] %d    %c    %s]\n", job_id, jobs_list[job_id].pid,
+    printf("[%d] %d    %c    %s\n", job_id, jobs_list[job_id].pid,
     jobs_list[job_id].status, command);
 
+    free(command);
     return 1;
 }
 
@@ -691,7 +699,8 @@ int internal_bg(char **args) {
 int internal_fg(char **args) {
     //Declaraciones
     int job_id = 0;
-    char *command = NULL;
+    char *command;
+    char *aux;
 
     /*CONDICIONES DE VERIFICACION DE SINTAXIS COMANDO FG*/
     if (args[1] == NULL) {
@@ -743,8 +752,11 @@ int internal_fg(char **args) {
 
     kill(pid, SIGCONT);
 
-    /*Modificación de la linea para quitar el & en lineas ejecutadas en bg*/    
-    char *aux = strtok(jobs_list[0].command_line, " &");
+    /*Modificación de la linea para quitar el & en lineas ejecutadas en bg*/
+
+    if (!(command = malloc(COMMAND_LINE_SIZE))) return -1;
+
+    aux = strtok(jobs_list[0].command_line, " &");
     command = strcpy(command, aux);
     command = strcat(command, " ");
     aux = strtok(NULL, " &");
