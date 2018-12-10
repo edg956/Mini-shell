@@ -1,4 +1,8 @@
-//#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200112L
+#ifdef USE_READLINE
+#endif 
+#define USE_READLINE
+
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <string.h>
@@ -11,6 +15,9 @@
 #include <signal.h>
 #include <fcntl.h>
 #include "aventura2.h"
+#include <readline/readline.h>
+#include <readline/history.h>
+
 
 
 /******************************************************************************
@@ -24,7 +31,7 @@ int n_pids;
 */
 static struct info_process jobs_list[ARGS_SIZE];
 
-void main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
     program_name = malloc(COMMAND_LINE_SIZE);
     program_name = strcpy(program_name, argv[0]);
@@ -41,14 +48,16 @@ void main(int argc, char *argv[]) {
     reset_jobs_list_fg();
 
     int error = 1;
-    while (error) {
-        print_prompt();
+      
+    while (error)
+    {
         error = execute_line(read_line(line));
     }
     char *ermsg = "\nHa ocurrido un error durante la ejecución del programa.\nCerrando.";
     imprime_error(ermsg);
-
 }
+
+
 
 /******************************************************************************
                          FUNCIONES DE LA AVENTURA 2
@@ -58,6 +67,9 @@ void main(int argc, char *argv[]) {
  * buffer de la entrada de datos estandar stdin.
  * Guarda el comando en el puntero del argumento 'line'.
  * 
+ * Dependiendo de si se hace uso de la librería readline se usará dicha librería
+ * o no. 
+ * 
  * Parámetros:
  *          +line: Puntero al espacio en memoria a partir del cual se almacenará
  *                 el comando escrito por el usuario.
@@ -66,26 +78,48 @@ void main(int argc, char *argv[]) {
  *                 entrado.
  */
 char *read_line(char *line) {
-    char *command = fgets(line, COMMAND_LINE_SIZE, stdin);
 
-    /*Chequear en casos de que la linea que entra sea NULL y no se haya
-    encontrado el final de fichero del stdin.
-    Casos como después de presionar Ctrl+C o Ctrl+Z*/
+    //Declaraciones
+    char *command;
+    char *prompt = malloc(PROMPT_SIZE);
+
+//Uso de la librería readline (edición de comandos disponible e historial).
+#ifdef USE_READLINE
+
+   command = readline(print_prompt(prompt));
+
+   if (command == NULL) return NULL;
+   
+   add_history(command);
+   strcpy(line, command);
+   free(command);
+return line;
+
+//Uso del propio readline (sin edición de comandos e historial).
+#else
+    printf("%s", print_prompt(prompt));
+
+    command = fgets(line, COMMAND_LINE_SIZE, stdin);
 
     if (!command && !feof(stdin)) {
+        
         command = line;
         command[0] = 0;
         puts("");
     }
-    
+
     //En caso de presionar Ctrl+D con un elemento, agregar salto de linea.
     if (command && feof(stdin)) puts("");
 
     clearerr(stdin);    //Resetear el indicador de EOF y de errores del STDIN
     fflush(stdin);
     fflush(stdout);
-    return command;
+       return command;
+
+    #endif
+
 }
+
 
 /**
  * Funcion que ejecuta el comando contenido en el String 'line'.
@@ -108,6 +142,7 @@ char *read_line(char *line) {
  *      +0: Si la operacion se realizo sin problemas.
  *      +(-1): En caso de error.
  */
+
 int execute_line(char *line) {
     
     //Exit cuando Ctrl+D es presionado y se devuelve un puntero NULL.
@@ -129,13 +164,12 @@ int execute_line(char *line) {
     linecpy = strtok(linecpy,delim);    //Eliminar '\n' de la linea
     
     //Trocear line en argumentos.
-    int num_tokens = parse_args(args, line); 
+    parse_args(args, line); 
 
     //Ver si la función a ejecutar es fg o bg
     is_bg = is_background(args);    
 
     //Check si el comando ha sido un comando interno o externo
-    int chk_int;
     if (check_internal(args) == 0) {
 
         /*Ejecución de comando externo*/
@@ -178,9 +212,6 @@ int execute_line(char *line) {
                 exit(1);
             }
         }
-        
-        //Código para proceso padre:  
-        char *linecop;
 
         //Enviar señal al enterrador de hijos
         signal(SIGCHLD, reaper);
@@ -541,7 +572,7 @@ int internal_source(char **args) {
  * valor.
  */
 int internal_jobs(char **args) {
-    /*Recorre la lista de trabajos en segundo plano*/
+    //Recorre la lista de trabajos en segundo plano
     for (int i = 1; i <= n_pids; i++) {
         //Imprimir info de cada job
         printf("[%d] %d    %c    %s\n",i
@@ -564,7 +595,7 @@ int internal_jobs(char **args) {
 int internal_bg(char **args) {
     //Declaraciones
     int job_id = 0;
-    pid_t job_pid = 0;
+    char *command = NULL;
 
     /*CONDICIONES DE VERIFICACIÓN DE SINTAXIS PARA COMANDO BG*/
     if (args[1] == NULL) {
@@ -624,7 +655,6 @@ int internal_bg(char **args) {
 
     kill(jobs_list[job_id].pid, SIGCONT);
 
-    char *command;
     //Imprimir linea de comando con & si no lo tiene ya.
     if (!strchr(jobs_list[job_id].command_line, '&')) {
         command = strcpy(command, jobs_list[job_id].command_line);
@@ -653,7 +683,7 @@ int internal_bg(char **args) {
 int internal_fg(char **args) {
     //Declaraciones
     int job_id = 0;
-    pid_t job_pid = 0;
+    char *command = NULL;
 
     /*CONDICIONES DE VERIFICACION DE SINTAXIS COMANDO FG*/
     if (args[1] == NULL) {
@@ -707,7 +737,7 @@ int internal_fg(char **args) {
 
     /*Modificación de la linea para quitar el & en lineas ejecutadas en bg*/    
     char *aux = strtok(jobs_list[0].command_line, " &");
-    char *command = strcpy(command, aux);
+    command = strcpy(command, aux);
     command = strcat(command, " ");
     aux = strtok(NULL, " &");
     command = strcat(command, aux);
@@ -794,13 +824,13 @@ void reaper(int signum) {
 
 void ctrlc(int signum) {
 
-    //Porque esta linea? Esta en el main ya.
     signal(SIGINT, ctrlc);
 
     //Declaraciones
     char *error = NULL; 
     char *line;
     char *pnamecpy;
+
     //Check for errors
     if (!(line = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
     if (!(pnamecpy = malloc(COMMAND_LINE_SIZE))) imprime_error(NULL);
@@ -812,7 +842,6 @@ void ctrlc(int signum) {
             para poder modificarlos y compararles
         */
         pnamecpy = strcpy(pnamecpy, program_name); //Copia program_name
-        //strcat(pnamecpy, "\n");
 
         char *delim = " ";
         line = strcpy(line, jobs_list[0].command_line); //Copia linea de
@@ -859,7 +888,6 @@ void ctrlz(int signum) {
     signal(SIGTSTP, ctrlz);
 
     //Declaraciones
-    char *error = NULL;
     char *line;
     char *pnamecpy;
     //Check for errors
@@ -873,7 +901,6 @@ void ctrlz(int signum) {
             para poder modificarlos y compararles
         */
         pnamecpy = strcpy(pnamecpy, program_name); //Copia program_name
-        //strcat(pnamecpy, "\n");               //MODIFICADO POR AJUSTE EN LINEA
 
         char *delim = " ";
         line = strcpy(line, jobs_list[0].command_line); //Copia linea de
@@ -1071,7 +1098,7 @@ void imprime_error(char *mensaje_error) {
  * Return:
  *      +pline: Puntero al String que contiene el comando
  */
-void print_prompt() {
+char *print_prompt(char *prompt) {
 
     //Declaraciones
     char *user = getenv("USER");
@@ -1082,9 +1109,10 @@ void print_prompt() {
     gethostname(hostName, 256);
 
     char *path = getenv("PWD");
-
-    printf(CYAN_T"%s@%s"RESET_COLOR":"AMARILLO_T"%s"RESET_COLOR"%c ", user, hostName, path, PROMPT);
+    sprintf(prompt, CYAN_T"%s@%s"RESET_COLOR":"AMARILLO_T"%s"RESET_COLOR"%c ", user, hostName, path, PROMPT);  
+    return prompt;
 }
+
 
 /**
  * Función que verifica que el String 'argument' cumple con el formato aceptado
@@ -1113,7 +1141,8 @@ int check_formato(char *argument) {
             strchr(argument,'\"')) {
         for (int i = 0; argument[i] != '\0'; i++) {
             /*
-                Verifica que cuando se consigue un argumento con formato                    ['argumento con espacios'] se cumpla la condición:
+                Verifica que cuando se consigue un argumento con formato                    
+                ['argumento con espacios'] se cumpla la condición:
                 "No puede haber un argumento que comience por el
                 caracter '\'' y no termine por el caracter '\''."
 
@@ -1197,7 +1226,3 @@ int solo_numeros(const char *str) {
     }
     return 1;
 }
-
-
-
-

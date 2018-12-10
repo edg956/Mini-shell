@@ -1,6 +1,6 @@
 #define COMMAND_LINE_SIZE 1024
 #define ARGS_SIZE 64
-
+#define PROMPT_SIZE 1024
 #define PROMPT '$'
 
 //Colores
@@ -9,24 +9,6 @@
 #define CYAN_T     "\x1b[1m\033[36m"
 #define AMARILLO_T "\x1b[1m\033[33m"
 #define ROJO_F     "\x1b[41m"
-
-/*Se dejan los siguientes colores comentados por si son necesarios para futuras
-implementaciones.
-
-#define NEGRO_T        "\x1b[30m"
-#define NEGRO_F        "\x1b[40m"
-#define ROJO_T     "\x1b[31m"
-#define VERDE_F        "\x1b[42m"
-#define AMARILLO_F  "\x1b[43m"
-#define AZUL_F      "\x1b[44m"
-#define MAGENTA_T  "\x1b[1m\033[35m"
-#define MAGENTA_F  "\x1b[45m"
-#define CYAN_F     "\x1b[46m"
-#define BLANCO_T   "\x1b[37m"
-#define BLANCO_F   "\x1b[47m"
-#define GREEN_T        "\x1b[1m\033[32m"
-#define BLUE_T     "\x1b[1m\033[34m"
-*/
 
 /**
  * ESTRUCTURAS (STRUCT) DE MINISHELL
@@ -63,7 +45,7 @@ int is_output_redirection(char **args);
  * FUNCIONES AUXILIARES
  */
 void imprime_error(char *mensaje_error);
-void print_prompt();
+char *print_prompt(char *prompt);
 int check_formato();
 int internal_jobs2();
 void reset_jobs_list_fg();
