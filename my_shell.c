@@ -14,7 +14,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
-#include "aventura2.h"
+#include "my_shell.h"
 #include <readline/readline.h>
 #include <readline/history.h>
 
