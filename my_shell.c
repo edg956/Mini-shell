@@ -12,7 +12,7 @@ Professor/a: Adelaida Delgado
 #define _POSIX_C_SOURCE 200112L
 #ifdef USE_READLINE
 #endif 
-//#define USE_READLINE
+#define USE_READLINE
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -25,7 +25,7 @@ Professor/a: Adelaida Delgado
 #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
-#include "nivel7.h"
+#include "my_shell.h"
 #include <readline/readline.h>
 #include <readline/history.h>
 
