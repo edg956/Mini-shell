@@ -512,15 +512,18 @@ int internal_source(char **args) {
     }
     else {
         //Lectura y ejecución linea a linea hasta llegar a fin de fichero.
-        char* linea = NULL;
-        
+        char *linea;
+        if (!(linea = malloc(COMMAND_LINE_SIZE))) return -1;
+
         linea = fgets(linea, COMMAND_LINE_SIZE, f);
+
         while (linea != NULL){
             execute_line(linea);
             linea = fgets(linea, COMMAND_LINE_SIZE, f);
             fflush(f);
         }
         fclose(f);
+        free(linea);
     }
     return 1;
 }
