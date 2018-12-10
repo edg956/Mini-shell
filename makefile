@@ -2,10 +2,10 @@ CC=gcc
 CFLAGS=-c -g -Wall -std=c99
 LDFLAGS=-lreadline
 
-SOURCES= aventura2.c
+SOURCES= my_shell.c
 LIBRARIES= #.o
-INCLUDES= aventura2.h
-PROGRAMS=aventura2
+INCLUDES= my_shell.h
+PROGRAMS=my_shell
 OBJS=$(SOURCES:.c=.o)
 
 all: $(OBJS) $(PROGRAMS)
@@ -13,7 +13,7 @@ all: $(OBJS) $(PROGRAMS)
 #$(PROGRAMS): $(LIBRARIES) $(INCLUDES)
 #   $(CC) $(LDFLAGS) $(LIBRARIES) $@.o -o $@
 
-aventura2: aventura2.o
+my_shell: my_shell.o
 	$(CC) $@.o -o $@ $(LDFLAGS) $(LIBRARIES)
 
 %.o: %.c $(INCLUDES)
